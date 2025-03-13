@@ -15,6 +15,7 @@ from functools import lru_cache
 from sqlalchemy import func
 import icalendar
 from icalendar import Calendar, Event, vText
+import tempfile
 
 main = Blueprint('main', __name__)
 
@@ -550,21 +551,15 @@ def show_timeline():
                                      'zoomIn2d',
                                      'zoomOut2d',
                                      'pan2d',
-                                     'toImage',
-                                     'downloadImage'
+                                     'toImage'
                                  ],
                                  'displaylogo': False,
                                  'toImageButtonOptions': {
-                                     'format': 'png',
+                                     'format': 'svg',
                                      'filename': 'Lehrplan_Timeline',
                                      'height': 1080,
                                      'width': 1920,
-                                     'scale': 2,
-                                     'format': 'svg'
-                                 },
-                                 'downloadImage': {
-                                     'formats': ['svg', 'png', 'pdf'],
-                                     'filename': 'Lehrplan_Timeline'
+                                     'scale': 2
                                  }
                              }
                          ),
@@ -763,13 +758,29 @@ def export_report():
             include_statistics = request.args.get('include_statistics') == 'true'
             include_availabilities = request.args.get('include_availabilities') == 'true'
         
+        # Debug logging
+        current_app.logger.info(f"Export report requested - Type: {report_type}, Stats: {include_statistics}, Avail: {include_availabilities}")
+        current_app.logger.info(f"Filter options: {filter_options}")
+        
+        # Check for wkhtmltopdf
         wkhtmltopdf_path = os.environ.get('WKHTMLTOPDF_PATH', r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe')
+        current_app.logger.info(f"Using wkhtmltopdf path: {wkhtmltopdf_path}")
+        
         if not os.path.exists(wkhtmltopdf_path):
-            flash('wkhtmltopdf nicht gefunden. Bitte installieren Sie wkhtmltopdf oder prüfen Sie den Pfad.', 'error')
+            error_msg = f'wkhtmltopdf nicht gefunden unter {wkhtmltopdf_path}. Bitte installieren Sie wkhtmltopdf oder prüfen Sie den Pfad.'
+            current_app.logger.error(error_msg)
+            flash(error_msg, 'error')
+            return redirect(url_for('main.show_timeline'))
+        
+        try:    
+            config = pdfkit.configuration(wkhtmltopdf=wkhtmltopdf_path)
+            current_app.logger.info("PDF configuration created successfully")
+        except Exception as config_error:
+            error_msg = f"Fehler bei der Konfiguration von pdfkit: {str(config_error)}"
+            current_app.logger.error(error_msg)
+            flash(error_msg, 'error')
             return redirect(url_for('main.show_timeline'))
             
-        config = pdfkit.configuration(wkhtmltopdf=wkhtmltopdf_path)
-        
         # Hole aktive Kurse basierend auf den Filteroptionen
         query = db.session.query(Course).filter(Course.active == True)
         
@@ -784,6 +795,7 @@ def export_report():
             query = query.filter(Course.end_date >= start_date, Course.start_date <= end_date)
             
         courses = query.order_by(Course.curriculum_id, Course.start_date).all()
+        current_app.logger.info(f"Found {len(courses)} courses matching filter criteria")
         
         if not courses:
             flash('Keine Kurse gefunden, die den Filterkriterien entsprechen.', 'warning')
@@ -867,10 +879,18 @@ def export_report():
                 .all()
 
         # Erstelle Timeline-Bild
-        fig = create_timeline_figure(courses, filter_options)
-        timeline_img = fig.to_image(format="png", width=1200, height=600, scale=2)
-        import base64
-        timeline_image = base64.b64encode(timeline_img).decode('utf-8')
+        try:
+            fig = create_timeline_figure(courses, filter_options)
+            # Reduce image quality to avoid rendering issues with wkhtmltopdf
+            timeline_img = fig.to_image(format="png", width=1000, height=500, scale=1.5)
+            import base64
+            timeline_image = base64.b64encode(timeline_img).decode('utf-8')
+            current_app.logger.info("Timeline image created successfully")
+        except Exception as img_error:
+            error_msg = f"Fehler beim Erstellen des Timeline-Bildes: {str(img_error)}"
+            current_app.logger.error(error_msg)
+            flash(error_msg, 'error')
+            return redirect(url_for('main.show_timeline'))
 
         # Organisiere Kurse nach Batches
         batches = []
@@ -905,41 +925,68 @@ def export_report():
             })
 
         # Wähle das richtige Template basierend auf dem Berichtstyp
-        if report_type == 'lecturer':
-            report_template_path = 'pdf_templates/lecturer_report.html'
-        elif report_type == 'curriculum':
-            report_template_path = 'pdf_templates/curriculum_report.html'
-        else:
-            report_template_path = 'pdf_templates/standard_report.html'
+        try:
+            if report_type == 'lecturer':
+                report_template_path = 'pdf_templates/lecturer_report.html'
+            elif report_type == 'curriculum':
+                report_template_path = 'pdf_templates/curriculum_report.html'
+            else:
+                report_template_path = 'pdf_templates/standard_report.html'
 
-        # Stelle sicher, dass die Verzeichnisse existieren
-        pdf_template_dir = os.path.join(current_app.root_path, 'templates', 'pdf_templates')
-        os.makedirs(pdf_template_dir, exist_ok=True)
+            # Stelle sicher, dass die Verzeichnisse existieren
+            pdf_template_dir = os.path.join(current_app.root_path, 'templates', 'pdf_templates')
+            os.makedirs(pdf_template_dir, exist_ok=True)
+            current_app.logger.info(f"Template directory created at: {pdf_template_dir}")
 
-        # Wähle das Standard-Template, wenn die spezielle Vorlage nicht existiert
-        report_template_path = os.path.join(current_app.root_path, 'templates', report_template_path)
-        if not os.path.exists(report_template_path):
-            report_template_path = os.path.join(current_app.root_path, 'templates', 'pdf_templates/standard_report.html')
+            # Wähle das Standard-Template, wenn die spezielle Vorlage nicht existiert
+            report_template_path = os.path.join(current_app.root_path, 'templates', report_template_path)
+            current_app.logger.info(f"Attempting to load template from: {report_template_path}")
+            
             if not os.path.exists(report_template_path):
-                # Erstelle das Standard-Template, wenn es nicht existiert
-                with open(report_template_path, 'w', encoding='utf-8') as f:
-                    f.write(get_standard_report_template())
-
-        with open(report_template_path, 'r', encoding='utf-8') as f:
-            report_template = f.read()
+                report_template_path = os.path.join(current_app.root_path, 'templates', 'pdf_templates/standard_report.html')
+                current_app.logger.info(f"Falling back to standard template: {report_template_path}")
+                
+                if not os.path.exists(report_template_path):
+                    # Erstelle das Standard-Template, wenn es nicht existiert
+                    current_app.logger.info("Standard template not found, creating it")
+                    os.makedirs(os.path.dirname(report_template_path), exist_ok=True)
+                    with open(report_template_path, 'w', encoding='utf-8') as f:
+                        f.write(get_standard_report_template())
+            
+            # Lese Template-Inhalt
+            with open(report_template_path, 'r', encoding='utf-8') as f:
+                report_template = f.read()
+                current_app.logger.info(f"Template loaded, size: {len(report_template)} bytes")
+        except Exception as template_error:
+            error_msg = f"Fehler beim Laden des Templates: {str(template_error)}"
+            current_app.logger.error(error_msg)
+            flash(error_msg, 'error')
+            return redirect(url_for('main.show_timeline'))
 
         # Rendere Template
-        template = Template(report_template)
-        html_content = template.render(
-            current_date=datetime.now().strftime('%d.%m.%Y'),
-            timeline_image=timeline_image,
-            batches=batches,
-            statistics=statistics_data,
-            availabilities=availabilities,
-            include_statistics=include_statistics,
-            include_availabilities=include_availabilities,
-            report_type=report_type
-        )
+        try:
+            template = Template(report_template)
+            current_app.logger.info("Template object created")
+            
+            render_context = {
+                'current_date': datetime.now().strftime('%d.%m.%Y'),
+                'timeline_image': timeline_image,
+                'batches': batches,
+                'statistics': statistics_data,
+                'availabilities': availabilities,
+                'include_statistics': include_statistics,
+                'include_availabilities': include_availabilities,
+                'report_type': report_type
+            }
+            current_app.logger.info(f"Rendering template with context (image size: {len(timeline_image)} bytes)")
+            
+            html_content = template.render(**render_context)
+            current_app.logger.info(f"Template rendered, HTML size: {len(html_content)} bytes")
+        except Exception as render_error:
+            error_msg = f"Fehler beim Rendern des Templates: {str(render_error)}"
+            current_app.logger.error(error_msg)
+            flash(error_msg, 'error')
+            return redirect(url_for('main.show_timeline'))
 
         # PDF-Optionen
         pdf_options = {
@@ -955,40 +1002,276 @@ def export_report():
             'footer-font-size': '8',
             'header-html': '',
             'footer-line': '',
+            'disable-smart-shrinking': '',  # This helps with image rendering
+            'no-stop-slow-scripts': '',     # Prevent timeout on complex scripts
             'quiet': ''
         }
 
-        # Konvertiere zu PDF mit Konfiguration
-        pdf = pdfkit.from_string(html_content, False, options=pdf_options, configuration=config)
+        # Convert to PDF with configuration
+        try:
+            current_app.logger.info("Attempting to generate PDF from HTML content")
+            
+            # Try to save the HTML content to a temporary file and convert that instead
+            # This approach often works better for complex content
+            with tempfile.NamedTemporaryFile(suffix='.html', delete=False) as temp_html:
+                temp_html_path = temp_html.name
+                temp_html.write(html_content.encode('utf-8'))
+                
+            current_app.logger.info(f"Saved HTML to temporary file: {temp_html_path}")
+            
+            try:
+                # Try file-based conversion first (often more reliable with large content)
+                pdf = pdfkit.from_file(temp_html_path, False, options=pdf_options, configuration=config)
+                current_app.logger.info("PDF generated successfully from file")
+            except Exception as file_error:
+                current_app.logger.warning(f"File-based PDF generation failed: {str(file_error)}. Trying string method...")
+                # Fall back to string-based conversion
+                pdf = pdfkit.from_string(html_content, False, options=pdf_options, configuration=config)
+                current_app.logger.info("PDF generated successfully from string")
+            
+            # Clean up temporary file
+            try:
+                os.unlink(temp_html_path)
+            except:
+                pass
+                
+        except Exception as pdf_error:
+            error_msg = f"Fehler beim Erstellen des PDFs: {str(pdf_error)}"
+            current_app.logger.error(error_msg)
+            flash(error_msg, 'error')
+            return redirect(url_for('main.show_timeline'))
 
-        # Sende PDF
-        pdf_io = BytesIO(pdf)
-        pdf_io.seek(0)
-        
-        # Namen basierend auf Filteroptionen generieren
-        filename_parts = ['Lehrplan_Bericht']
-        if filter_options.get('lecturer_id'):
-            lecturer = Lecturer.query.get(filter_options['lecturer_id'])
-            if lecturer:
-                filename_parts.append(f"Dozent_{lecturer.name.replace(' ', '_')}")
-        
-        if filter_options.get('curriculum_id'):
-            filename_parts.append(f"Batch_{filter_options['curriculum_id'][:8]}")
+        # Send PDF
+        try:
+            pdf_io = BytesIO(pdf)
+            pdf_io.seek(0)
             
-        if filter_options.get('date_range'):
-            start, end = filter_options['date_range']
-            filename_parts.append(f"{start.strftime('%Y%m%d')}-{end.strftime('%Y%m%d')}")
+            # Generate filename based on filter options
+            filename_parts = ['Lehrplan_Bericht']
+            if filter_options.get('lecturer_id'):
+                lecturer = Lecturer.query.get(filter_options['lecturer_id'])
+                if lecturer:
+                    filename_parts.append(f"Dozent_{lecturer.name.replace(' ', '_')}")
             
-        filename = '_'.join(filename_parts) + '.pdf'
-        
-        return send_file(
-            pdf_io,
-            download_name=filename,
-            mimetype='application/pdf'
-        )
+            if filter_options.get('curriculum_id'):
+                filename_parts.append(f"Batch_{filter_options['curriculum_id'][:8]}")
+                
+            if filter_options.get('date_range'):
+                start, end = filter_options['date_range']
+                filename_parts.append(f"{start.strftime('%Y%m%d')}-{end.strftime('%Y%m%d')}")
+                
+            filename = '_'.join(filename_parts) + '.pdf'
+            current_app.logger.info(f"Sending PDF with filename: {filename}")
+            
+            return send_file(
+                pdf_io,
+                download_name=filename,
+                mimetype='application/pdf'
+            )
+        except Exception as send_error:
+            error_msg = f"Fehler beim Senden des PDFs: {str(send_error)}"
+            current_app.logger.error(error_msg)
+            flash(error_msg, 'error')
+            return redirect(url_for('main.show_timeline'))
 
     except Exception as e:
-        flash(f'Fehler beim Erstellen des PDF-Berichts: {str(e)}', 'error')
+        error_msg = f'Fehler beim Erstellen des PDF-Berichts: {str(e)}'
+        current_app.logger.error(error_msg)
+        flash(error_msg, 'error')
+        return redirect(url_for('main.show_timeline'))
+
+@main.route('/export-report-html', methods=['GET', 'POST'])
+def export_report_html():
+    """
+    Alternative export method that returns HTML directly instead of attempting PDF conversion.
+    This can help diagnose if the issue is with pdfkit or with the template rendering.
+    """
+    try:
+        # Get filter parameters
+        filter_options = {}
+        if request.method == 'POST':
+            if request.form.get('lecturer_id'):
+                filter_options['lecturer_id'] = int(request.form.get('lecturer_id'))
+            if request.form.get('curriculum_id'):
+                filter_options['curriculum_id'] = request.form.get('curriculum_id')
+            if request.form.get('start_date') and request.form.get('end_date'):
+                start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d')
+                end_date = datetime.strptime(request.form.get('end_date'), '%Y-%m-%d')
+                filter_options['date_range'] = [start_date, end_date]
+            
+            report_type = request.form.get('report_type', 'standard')
+            include_statistics = request.form.get('include_statistics') == 'on'
+            include_availabilities = request.form.get('include_availabilities') == 'on'
+        else:
+            report_type = request.args.get('report_type', 'standard')
+            include_statistics = request.args.get('include_statistics') == 'true'
+            include_availabilities = request.args.get('include_availabilities') == 'true'
+        
+        # Hole aktive Kurse basierend auf den Filteroptionen
+        query = db.session.query(Course).filter(Course.active == True)
+        
+        if filter_options.get('lecturer_id'):
+            query = query.filter(Course.lecturer_id == filter_options['lecturer_id'])
+        
+        if filter_options.get('curriculum_id'):
+            query = query.filter(Course.curriculum_id == filter_options['curriculum_id'])
+            
+        if filter_options.get('date_range'):
+            start_date, end_date = filter_options['date_range']
+            query = query.filter(Course.end_date >= start_date, Course.start_date <= end_date)
+            
+        courses = query.order_by(Course.curriculum_id, Course.start_date).all()
+        
+        if not courses:
+            flash('Keine Kurse gefunden, die den Filterkriterien entsprechen.', 'warning')
+            return redirect(url_for('main.show_timeline'))
+
+        # Statistikdaten sammeln, wenn gewünscht
+        statistics_data = {}
+        if include_statistics:
+            # Kursstatistiken
+            total_days = sum([(course.end_date - course.start_date).days + 1 for course in courses])
+            avg_duration = round(total_days / len(courses), 1) if courses else 0
+            statistics_data = {
+                'course_count': len(courses),
+                'total_days': total_days,
+                'avg_duration': avg_duration
+            }
+            
+            # Top-Dozenten
+            lecturer_stats = {}
+            for course in courses:
+                if course.lecturer:
+                    if course.lecturer.id not in lecturer_stats:
+                        lecturer_stats[course.lecturer.id] = {
+                            'name': course.lecturer.name,
+                            'color': course.lecturer.color or '#808080',
+                            'course_count': 0,
+                            'total_days': 0
+                        }
+                    lecturer_stats[course.lecturer.id]['course_count'] += 1
+                    lecturer_stats[course.lecturer.id]['total_days'] += (course.end_date - course.start_date).days + 1
+            
+            statistics_data['top_lecturers'] = sorted(
+                lecturer_stats.values(),
+                key=lambda x: x['total_days'],
+                reverse=True
+            )[:5]  # Top 5 Dozenten
+            
+            # Häufigste Themen
+            topic_counts = {}
+            for course in courses:
+                topic = course.topic
+                if topic not in topic_counts:
+                    topic_counts[topic] = 0
+                topic_counts[topic] += 1
+            
+            statistics_data['top_topics'] = [
+                {'topic': topic, 'count': count}
+                for topic, count in sorted(topic_counts.items(), key=lambda x: x[1], reverse=True)
+            ][:5]  # Top 5 Themen
+        
+        # Verfügbarkeiten sammeln, wenn gewünscht
+        availabilities = []
+        if include_availabilities:
+            # Finde alle beteiligten Dozenten
+            all_lecturers = set()
+            for course in courses:
+                if course.lecturer_id:
+                    all_lecturers.add(course.lecturer_id)
+            
+            # Finde den Gesamtzeitraum
+            min_date = min([course.start_date for course in courses])
+            max_date = max([course.end_date for course in courses])
+            
+            # Verfügbarkeiten abfragen
+            availabilities = db.session.query(Availability)\
+                .filter(Availability.lecturer_id.in_(all_lecturers))\
+                .filter(Availability.end_date >= min_date, Availability.start_date <= max_date)\
+                .order_by(Availability.start_date)\
+                .all()
+
+        # Create timeline image
+        fig = create_timeline_figure(courses, filter_options)
+        timeline_img = fig.to_image(format="png", width=1200, height=600, scale=2)
+        import base64
+        timeline_image = base64.b64encode(timeline_img).decode('utf-8')
+
+        # Organize courses by batches
+        batches = []
+        current_batch = None
+        
+        # First group by curriculum_id
+        curriculum_courses = {}
+        for course in courses:
+            if course.curriculum_id not in curriculum_courses:
+                curriculum_courses[course.curriculum_id] = []
+            curriculum_courses[course.curriculum_id].append(course)
+        
+        # Then sort by start date of first course
+        sorted_curriculum_ids = sorted(
+            curriculum_courses.keys(),
+            key=lambda cid: min([c.start_date for c in curriculum_courses[cid]])
+        )
+        
+        # Create batches
+        for i, curriculum_id in enumerate(sorted_curriculum_ids):
+            first_course = min(curriculum_courses[curriculum_id], key=lambda c: c.start_date)
+            
+            # Format batch name
+            semester = "SoSe" if first_course.start_date.month >= 3 and first_course.start_date.month <= 8 else "WiSe"
+            year = first_course.start_date.year
+            
+            batches.append({
+                'curriculum_id': curriculum_id,
+                'name': f"Batch {i + 1} ({semester} {year})",
+                'start_date': first_course.start_date,
+                'courses': sorted(curriculum_courses[curriculum_id], key=lambda c: c.start_date)
+            })
+
+        # Select the correct template based on report type
+        if report_type == 'lecturer':
+            report_template_path = 'pdf_templates/lecturer_report.html'
+        elif report_type == 'curriculum':
+            report_template_path = 'pdf_templates/curriculum_report.html'
+        else:
+            report_template_path = 'pdf_templates/standard_report.html'
+
+        # Ensure directories exist
+        pdf_template_dir = os.path.join(current_app.root_path, 'templates', 'pdf_templates')
+        os.makedirs(pdf_template_dir, exist_ok=True)
+
+        # Use standard template if special one doesn't exist
+        report_template_path = os.path.join(current_app.root_path, 'templates', report_template_path)
+        if not os.path.exists(report_template_path):
+            report_template_path = os.path.join(current_app.root_path, 'templates', 'pdf_templates/standard_report.html')
+            if not os.path.exists(report_template_path):
+                # Create standard template if it doesn't exist
+                with open(report_template_path, 'w', encoding='utf-8') as f:
+                    f.write(get_standard_report_template())
+
+        # Read template
+        with open(report_template_path, 'r', encoding='utf-8') as f:
+            report_template = f.read()
+
+        # Render template
+        template = Template(report_template)
+        html_content = template.render(
+            current_date=datetime.now().strftime('%d.%m.%Y'),
+            timeline_image=timeline_image,
+            batches=batches,
+            statistics=statistics_data,
+            availabilities=availabilities,
+            include_statistics=include_statistics,
+            include_availabilities=include_availabilities,
+            report_type=report_type
+        )
+
+        # Return HTML directly instead of converting to PDF
+        return html_content
+
+    except Exception as e:
+        flash(f'Fehler beim Erstellen des HTML-Berichts: {str(e)}', 'error')
         return redirect(url_for('main.show_timeline'))
 
 def get_standard_report_template():
@@ -1947,3 +2230,613 @@ def add_course():
     lecturers = Lecturer.query.all()
     
     return render_template('add_course.html', curricula=curricula, lecturers=lecturers)
+
+@main.route('/export-report-download', methods=['GET', 'POST'])
+def export_report_download():
+    """
+    Export the report as a downloadable HTML file that can be printed to PDF from the browser.
+    This bypasses wkhtmltopdf completely.
+    """
+    try:
+        # Get filter parameters
+        filter_options = {}
+        if request.method == 'POST':
+            if request.form.get('lecturer_id'):
+                filter_options['lecturer_id'] = int(request.form.get('lecturer_id'))
+            if request.form.get('curriculum_id'):
+                filter_options['curriculum_id'] = request.form.get('curriculum_id')
+            if request.form.get('start_date') and request.form.get('end_date'):
+                start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d')
+                end_date = datetime.strptime(request.form.get('end_date'), '%Y-%m-%d')
+                filter_options['date_range'] = [start_date, end_date]
+            
+            report_type = request.form.get('report_type', 'standard')
+            include_statistics = request.form.get('include_statistics') == 'on'
+            include_availabilities = request.form.get('include_availabilities') == 'on'
+        else:
+            report_type = request.args.get('report_type', 'standard')
+            include_statistics = request.args.get('include_statistics') == 'true'
+            include_availabilities = request.args.get('include_availabilities') == 'true'
+        
+        # Hole aktive Kurse basierend auf den Filteroptionen
+        query = db.session.query(Course).filter(Course.active == True)
+        
+        if filter_options.get('lecturer_id'):
+            query = query.filter(Course.lecturer_id == filter_options['lecturer_id'])
+        
+        if filter_options.get('curriculum_id'):
+            query = query.filter(Course.curriculum_id == filter_options['curriculum_id'])
+            
+        if filter_options.get('date_range'):
+            start_date, end_date = filter_options['date_range']
+            query = query.filter(Course.end_date >= start_date, Course.start_date <= end_date)
+            
+        courses = query.order_by(Course.curriculum_id, Course.start_date).all()
+        
+        if not courses:
+            flash('Keine Kurse gefunden, die den Filterkriterien entsprechen.', 'warning')
+            return redirect(url_for('main.show_timeline'))
+
+        # Similar preparation as in export_report_html
+        statistics_data = {}
+        if include_statistics:
+            # Compute statistics...
+            total_days = sum([(course.end_date - course.start_date).days + 1 for course in courses])
+            avg_duration = round(total_days / len(courses), 1) if courses else 0
+            statistics_data = {
+                'course_count': len(courses),
+                'total_days': total_days,
+                'avg_duration': avg_duration
+            }
+            
+            # Additional statistics calculation...
+            lecturer_stats = {}
+            for course in courses:
+                if course.lecturer:
+                    if course.lecturer.id not in lecturer_stats:
+                        lecturer_stats[course.lecturer.id] = {
+                            'name': course.lecturer.name,
+                            'color': course.lecturer.color or '#808080',
+                            'course_count': 0,
+                            'total_days': 0
+                        }
+                    lecturer_stats[course.lecturer.id]['course_count'] += 1
+                    lecturer_stats[course.lecturer.id]['total_days'] += (course.end_date - course.start_date).days + 1
+            
+            statistics_data['top_lecturers'] = sorted(
+                lecturer_stats.values(),
+                key=lambda x: x['total_days'],
+                reverse=True
+            )[:5]  # Top 5 Dozenten
+            
+            # Häufigste Themen
+            topic_counts = {}
+            for course in courses:
+                topic = course.topic
+                if topic not in topic_counts:
+                    topic_counts[topic] = 0
+                topic_counts[topic] += 1
+            
+            statistics_data['top_topics'] = [
+                {'topic': topic, 'count': count}
+                for topic, count in sorted(topic_counts.items(), key=lambda x: x[1], reverse=True)
+            ][:5]  # Top 5 Themen
+        
+        # Get availabilities
+        availabilities = []
+        if include_availabilities:
+            # Find all lecturers
+            all_lecturers = set()
+            for course in courses:
+                if course.lecturer_id:
+                    all_lecturers.add(course.lecturer_id)
+            
+            # Find date range
+            min_date = min([course.start_date for course in courses])
+            max_date = max([course.end_date for course in courses])
+            
+            # Query availabilities
+            availabilities = db.session.query(Availability)\
+                .filter(Availability.lecturer_id.in_(all_lecturers))\
+                .filter(Availability.end_date >= min_date, Availability.start_date <= max_date)\
+                .order_by(Availability.start_date)\
+                .all()
+
+        # Create timeline image
+        fig = create_timeline_figure(courses, filter_options)
+        timeline_img = fig.to_image(format="png", width=1000, height=500, scale=1.5)
+        import base64
+        timeline_image = base64.b64encode(timeline_img).decode('utf-8')
+
+        # Group courses by batch
+        batches = []
+        curriculum_courses = {}
+        for course in courses:
+            if course.curriculum_id not in curriculum_courses:
+                curriculum_courses[course.curriculum_id] = []
+            curriculum_courses[course.curriculum_id].append(course)
+        
+        sorted_curriculum_ids = sorted(
+            curriculum_courses.keys(),
+            key=lambda cid: min([c.start_date for c in curriculum_courses[cid]])
+        )
+        
+        for i, curriculum_id in enumerate(sorted_curriculum_ids):
+            first_course = min(curriculum_courses[curriculum_id], key=lambda c: c.start_date)
+            semester = "SoSe" if first_course.start_date.month >= 3 and first_course.start_date.month <= 8 else "WiSe"
+            year = first_course.start_date.year
+            
+            batches.append({
+                'curriculum_id': curriculum_id,
+                'name': f"Batch {i + 1} ({semester} {year})",
+                'start_date': first_course.start_date,
+                'courses': sorted(curriculum_courses[curriculum_id], key=lambda c: c.start_date)
+            })
+
+        # Get template
+        if report_type == 'lecturer':
+            report_template_path = 'pdf_templates/lecturer_report.html'
+        elif report_type == 'curriculum':
+            report_template_path = 'pdf_templates/curriculum_report.html'
+        else:
+            report_template_path = 'pdf_templates/standard_report.html'
+
+        pdf_template_dir = os.path.join(current_app.root_path, 'templates', 'pdf_templates')
+        os.makedirs(pdf_template_dir, exist_ok=True)
+
+        report_template_path = os.path.join(current_app.root_path, 'templates', report_template_path)
+        if not os.path.exists(report_template_path):
+            report_template_path = os.path.join(current_app.root_path, 'templates', 'pdf_templates/standard_report.html')
+            if not os.path.exists(report_template_path):
+                with open(report_template_path, 'w', encoding='utf-8') as f:
+                    f.write(get_standard_report_template())
+
+        with open(report_template_path, 'r', encoding='utf-8') as f:
+            report_template = f.read()
+
+        # Add print-specific CSS for browser printing
+        print_css = """
+        <style>
+        @media print {
+            @page {
+                size: A4;
+                margin: 2cm;
+            }
+            body {
+                font-size: 12pt;
+            }
+            .timeline-img {
+                max-width: 100% !important;
+                height: auto !important;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+            table { 
+                page-break-inside: avoid;
+            }
+            /* Hide non-printing elements */
+            .no-print {
+                display: none !important;
+            }
+            /* Force background colors to print */
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+        }
+        
+        /* Print button */
+        .print-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            z-index: 1000;
+        }
+        .print-button:hover {
+            background-color: #0056b3;
+        }
+        </style>
+        <script>
+        function printReport() {
+            document.querySelector('.print-button').style.display = 'none';
+            window.print();
+            setTimeout(function() {
+                document.querySelector('.print-button').style.display = 'block';
+            }, 500);
+        }
+        </script>
+        """
+        
+        # Insert print CSS and button into the template
+        report_template = report_template.replace('</head>', print_css + '</head>')
+        report_template = report_template.replace('<body>', '<body><button class="print-button no-print" onclick="printReport()">Als PDF drucken</button>')
+
+        # Render template
+        template = Template(report_template)
+        html_content = template.render(
+            current_date=datetime.now().strftime('%d.%m.%Y'),
+            timeline_image=timeline_image,
+            batches=batches,
+            statistics=statistics_data,
+            availabilities=availabilities,
+            include_statistics=include_statistics,
+            include_availabilities=include_availabilities,
+            report_type=report_type
+        )
+
+        # Generate filename
+        filename_parts = ['Lehrplan_Bericht']
+        if filter_options.get('lecturer_id'):
+            lecturer = Lecturer.query.get(filter_options['lecturer_id'])
+            if lecturer:
+                filename_parts.append(f"Dozent_{lecturer.name.replace(' ', '_')}")
+        
+        if filter_options.get('curriculum_id'):
+            filename_parts.append(f"Batch_{filter_options['curriculum_id'][:8]}")
+            
+        if filter_options.get('date_range'):
+            start, end = filter_options['date_range']
+            filename_parts.append(f"{start.strftime('%Y%m%d')}-{end.strftime('%Y%m%d')}")
+            
+        filename = '_'.join(filename_parts) + '.html'
+
+        # Return as attachment
+        response = Response(html_content, mimetype='text/html')
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    except Exception as e:
+        flash(f'Fehler beim Erstellen des HTML-Berichts: {str(e)}', 'error')
+        return redirect(url_for('main.show_timeline'))
+
+@main.route('/export-report-direct', methods=['GET', 'POST'])
+def export_report_direct():
+    """
+    Direct PDF generation using ReportLab instead of wkhtmltopdf.
+    This avoids the QPaintDevice error that occurs with wkhtmltopdf.
+    """
+    try:
+        # Get filter parameters - same as export_report
+        filter_options = {}
+        if request.method == 'POST':
+            if request.form.get('lecturer_id'):
+                filter_options['lecturer_id'] = int(request.form.get('lecturer_id'))
+            if request.form.get('curriculum_id'):
+                filter_options['curriculum_id'] = request.form.get('curriculum_id')
+            if request.form.get('start_date') and request.form.get('end_date'):
+                start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d')
+                end_date = datetime.strptime(request.form.get('end_date'), '%Y-%m-%d')
+                filter_options['date_range'] = [start_date, end_date]
+            
+            report_type = request.form.get('report_type', 'standard')
+            include_statistics = request.form.get('include_statistics') == 'on'
+            include_availabilities = request.form.get('include_availabilities') == 'on'
+        else:
+            report_type = request.args.get('report_type', 'standard')
+            include_statistics = request.args.get('include_statistics') == 'true'
+            include_availabilities = request.args.get('include_availabilities') == 'true'
+        
+        # Get courses based on filter options
+        query = db.session.query(Course).filter(Course.active == True)
+        
+        if filter_options.get('lecturer_id'):
+            query = query.filter(Course.lecturer_id == filter_options['lecturer_id'])
+        
+        if filter_options.get('curriculum_id'):
+            query = query.filter(Course.curriculum_id == filter_options['curriculum_id'])
+            
+        if filter_options.get('date_range'):
+            start_date, end_date = filter_options['date_range']
+            query = query.filter(Course.end_date >= start_date, Course.start_date <= end_date)
+            
+        courses = query.order_by(Course.curriculum_id, Course.start_date).all()
+        
+        if not courses:
+            flash('Keine Kurse gefunden, die den Filterkriterien entsprechen.', 'warning')
+            return redirect(url_for('main.show_timeline'))
+
+        # Create statistics data
+        statistics_data = {}
+        if include_statistics:
+            total_days = sum([(course.end_date - course.start_date).days + 1 for course in courses])
+            avg_duration = round(total_days / len(courses), 1) if courses else 0
+            statistics_data = {
+                'course_count': len(courses),
+                'total_days': total_days,
+                'avg_duration': avg_duration
+            }
+            
+            # Get lecturer statistics
+            lecturer_stats = {}
+            for course in courses:
+                if course.lecturer:
+                    if course.lecturer.id not in lecturer_stats:
+                        lecturer_stats[course.lecturer.id] = {
+                            'name': course.lecturer.name,
+                            'course_count': 0,
+                            'total_days': 0
+                        }
+                    lecturer_stats[course.lecturer.id]['course_count'] += 1
+                    lecturer_stats[course.lecturer.id]['total_days'] += (course.end_date - course.start_date).days + 1
+            
+            statistics_data['top_lecturers'] = sorted(
+                lecturer_stats.values(),
+                key=lambda x: x['total_days'],
+                reverse=True
+            )[:5]
+            
+            # Get topic statistics
+            topic_counts = {}
+            for course in courses:
+                topic = course.topic
+                if topic not in topic_counts:
+                    topic_counts[topic] = 0
+                topic_counts[topic] += 1
+            
+            statistics_data['top_topics'] = [
+                {'topic': topic, 'count': count}
+                for topic, count in sorted(topic_counts.items(), key=lambda x: x[1], reverse=True)
+            ][:5]
+
+        # Get availabilities if needed
+        availabilities = []
+        if include_availabilities:
+            all_lecturers = set()
+            for course in courses:
+                if course.lecturer_id:
+                    all_lecturers.add(course.lecturer_id)
+            
+            min_date = min([course.start_date for course in courses])
+            max_date = max([course.end_date for course in courses])
+            
+            availabilities = db.session.query(Availability)\
+                .filter(Availability.lecturer_id.in_(all_lecturers))\
+                .filter(Availability.end_date >= min_date, Availability.start_date <= max_date)\
+                .order_by(Availability.start_date)\
+                .all()
+
+        # Create timeline image
+        fig = create_timeline_figure(courses, filter_options)
+        timeline_img = fig.to_image(format="png", width=1000, height=500, scale=1.5)
+        
+        # Organize courses by batch
+        batches = []
+        curriculum_courses = {}
+        
+        for course in courses:
+            if course.curriculum_id not in curriculum_courses:
+                curriculum_courses[course.curriculum_id] = []
+            curriculum_courses[course.curriculum_id].append(course)
+        
+        sorted_curriculum_ids = sorted(
+            curriculum_courses.keys(),
+            key=lambda cid: min([c.start_date for c in curriculum_courses[cid]])
+        )
+        
+        for i, curriculum_id in enumerate(sorted_curriculum_ids):
+            first_course = min(curriculum_courses[curriculum_id], key=lambda c: c.start_date)
+            semester = "SoSe" if first_course.start_date.month >= 3 and first_course.start_date.month <= 8 else "WiSe"
+            year = first_course.start_date.year
+            
+            batches.append({
+                'curriculum_id': curriculum_id,
+                'name': f"Batch {i + 1} ({semester} {year})",
+                'start_date': first_course.start_date,
+                'courses': sorted(curriculum_courses[curriculum_id], key=lambda c: c.start_date)
+            })
+
+        # Now use reportlab to generate PDF
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, PageBreak
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import mm
+        from io import BytesIO
+        
+        # Set up the document
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, 
+                               rightMargin=20*mm, leftMargin=20*mm,
+                               topMargin=20*mm, bottomMargin=20*mm)
+        
+        # Styles
+        styles = getSampleStyleSheet()
+        styles.add(ParagraphStyle(name='Title', 
+                                 fontName='Helvetica-Bold', 
+                                 fontSize=18, 
+                                 alignment=1,  # 0=left, 1=center, 2=right
+                                 spaceAfter=6))
+        styles.add(ParagraphStyle(name='Heading2', 
+                                 fontName='Helvetica-Bold', 
+                                 fontSize=14,
+                                 spaceAfter=6))
+        styles.add(ParagraphStyle(name='Heading3', 
+                                 fontName='Helvetica-Bold', 
+                                 fontSize=12,
+                                 spaceAfter=6))
+        styles.add(ParagraphStyle(name='Normal', 
+                                 fontName='Helvetica', 
+                                 fontSize=10,
+                                 spaceAfter=6))
+        
+        # Content elements
+        elements = []
+        
+        # Title
+        elements.append(Paragraph('Lehrplan Übersicht', styles['Title']))
+        elements.append(Paragraph(f'Erstellt am {datetime.now().strftime("%d.%m.%Y")}', styles['Normal']))
+        elements.append(Spacer(1, 10*mm))
+        
+        # Timeline image
+        img_data = BytesIO(timeline_img)
+        img = Image(img_data, width=160*mm, height=80*mm)
+        elements.append(Paragraph('Timeline Übersicht', styles['Heading2']))
+        elements.append(img)
+        elements.append(Spacer(1, 5*mm))
+        
+        # Statistics if included
+        if include_statistics and statistics_data:
+            elements.append(Paragraph('Statistische Übersicht', styles['Heading2']))
+            
+            # Basic statistics
+            data = [
+                ['Anzahl Kurse', str(statistics_data['course_count'])],
+                ['Durchschnittliche Kursdauer', f"{statistics_data['avg_duration']} Tage"],
+                ['Gesamtzahl Kurstage', f"{statistics_data['total_days']} Tage"]
+            ]
+            
+            table = Table(data, colWidths=[100*mm, 50*mm])
+            table.setStyle(TableStyle([
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ]))
+            elements.append(table)
+            elements.append(Spacer(1, 5*mm))
+            
+            # Top lecturers if available
+            if statistics_data.get('top_lecturers'):
+                elements.append(Paragraph('Top Dozenten', styles['Heading3']))
+                
+                lecturer_data = [['Dozent', 'Anzahl Kurse', 'Gesamttage', 'Tage/Kurs']]
+                for lecturer in statistics_data['top_lecturers']:
+                    avg = round(lecturer['total_days'] / lecturer['course_count'], 1) if lecturer['course_count'] > 0 else 0
+                    lecturer_data.append([
+                        lecturer['name'],
+                        str(lecturer['course_count']),
+                        str(lecturer['total_days']),
+                        str(avg)
+                    ])
+                
+                table = Table(lecturer_data, colWidths=[70*mm, 30*mm, 30*mm, 30*mm])
+                table.setStyle(TableStyle([
+                    ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 10),
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ]))
+                elements.append(table)
+                elements.append(Spacer(1, 5*mm))
+            
+            # Top topics if available
+            if statistics_data.get('top_topics'):
+                elements.append(Paragraph('Häufigste Kursthemen', styles['Heading3']))
+                
+                topic_data = [['Thema', 'Anzahl']]
+                for topic in statistics_data['top_topics']:
+                    topic_data.append([topic['topic'], str(topic['count'])])
+                
+                table = Table(topic_data, colWidths=[130*mm, 30*mm])
+                table.setStyle(TableStyle([
+                    ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 10),
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ]))
+                elements.append(table)
+                elements.append(Spacer(1, 5*mm))
+        
+        # Page break before courses
+        elements.append(PageBreak())
+        
+        # Course details by batch
+        elements.append(Paragraph('Detaillierte Lehrplan Informationen', styles['Heading2']))
+        
+        for batch in batches:
+            elements.append(Paragraph(f"{batch['name']} (Start: {batch['start_date'].strftime('%d.%m.%Y')})", styles['Heading3']))
+            
+            course_data = [['Thema', 'Zeitraum', 'Dauer', 'Dozent']]
+            for course in batch['courses']:
+                duration = (course.end_date - course.start_date).days + 1
+                lecturer_name = course.lecturer.name if course.lecturer else 'Nicht zugewiesen'
+                
+                course_data.append([
+                    course.topic,
+                    f"{course.start_date.strftime('%d.%m.%Y')} - {course.end_date.strftime('%d.%m.%Y')}",
+                    f"{duration} Tage",
+                    lecturer_name
+                ])
+            
+            table = Table(course_data, colWidths=[70*mm, 50*mm, 20*mm, 30*mm])
+            table.setStyle(TableStyle([
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ]))
+            elements.append(table)
+            elements.append(Spacer(1, 5*mm))
+        
+        # Availabilities if included
+        if include_availabilities and availabilities:
+            # Add page break before availabilities
+            elements.append(PageBreak())
+            elements.append(Paragraph('Dozenten-Verfügbarkeiten', styles['Heading2']))
+            
+            avail_data = [['Dozent', 'Typ', 'Zeitraum', 'Dauer', 'Notiz']]
+            for avail in availabilities:
+                duration = (avail.end_date - avail.start_date).days + 1
+                avail_type = 'Urlaub' if avail.type == 'vacation' else 'Nicht verfügbar'
+                
+                avail_data.append([
+                    avail.lecturer.name,
+                    avail_type,
+                    f"{avail.start_date.strftime('%d.%m.%Y')} - {avail.end_date.strftime('%d.%m.%Y')}",
+                    f"{duration} Tage",
+                    avail.note or ''
+                ])
+            
+            table = Table(avail_data, colWidths=[40*mm, 25*mm, 45*mm, 20*mm, 40*mm])
+            table.setStyle(TableStyle([
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ]))
+            elements.append(table)
+        
+        # Build the PDF
+        doc.build(elements)
+        
+        # Generate filename
+        filename_parts = ['Lehrplan_Bericht']
+        if filter_options.get('lecturer_id'):
+            lecturer = Lecturer.query.get(filter_options['lecturer_id'])
+            if lecturer:
+                filename_parts.append(f"Dozent_{lecturer.name.replace(' ', '_')}")
+        
+        if filter_options.get('curriculum_id'):
+            filename_parts.append(f"Batch_{filter_options['curriculum_id'][:8]}")
+            
+        if filter_options.get('date_range'):
+            start, end = filter_options['date_range']
+            filename_parts.append(f"{start.strftime('%Y%m%d')}-{end.strftime('%Y%m%d')}")
+            
+        filename = '_'.join(filename_parts) + '.pdf'
+        
+        # Return the PDF
+        buffer.seek(0)
+        return send_file(
+            buffer,
+            download_name=filename,
+            mimetype='application/pdf'
+        )
+        
+    except Exception as e:
+        error_msg = f'Fehler beim Erstellen des direkten PDF-Berichts: {str(e)}'
+        current_app.logger.error(error_msg)
+        flash(error_msg, 'error')
+        return redirect(url_for('main.show_timeline'))
