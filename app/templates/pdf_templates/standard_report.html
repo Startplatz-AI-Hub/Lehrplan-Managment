@@ -1,0 +1,299 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Lehrplan Bericht</title>
+        <style>
+            @page {
+                size: A4;
+                margin: 2cm;
+            }
+            body { 
+                font-family: Arial, sans-serif; 
+                margin: 0;
+                padding: 0;
+                color: #333;
+                line-height: 1.4;
+            }
+            .header { 
+                text-align: center; 
+                margin-bottom: 30px;
+                border-bottom: 1px solid #ddd;
+                padding-bottom: 15px;
+                color: #1a5276;
+            }
+            .header h1 {
+                margin-bottom: 5px;
+            }
+            .header p {
+                color: #777;
+                margin-top: 0;
+            }
+            .section {
+                margin-bottom: 25px;
+                page-break-inside: avoid;
+            }
+            .section h2 {
+                color: #2874a6;
+                border-bottom: 1px solid #eee;
+                padding-bottom: 7px;
+            }
+            .timeline-section { 
+                margin-bottom: 40px; 
+                text-align: center;
+            }
+            .curriculum-section { 
+                margin-bottom: 30px; 
+            }
+            .stats-section {
+                margin: 30px 0;
+                background-color: #f8f9fa;
+                padding: 15px;
+                border-radius: 5px;
+            }
+            .stats-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+            }
+            .stat-card {
+                padding: 15px;
+                background-color: white;
+                border-radius: 5px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }
+            .stat-title {
+                font-weight: bold;
+                margin-bottom: 10px;
+                color: #2874a6;
+            }
+            .stat-value {
+                font-size: 1.2em;
+                font-weight: bold;
+            }
+            .batch-header { 
+                background-color: #f8f9fa;
+                padding: 10px;
+                margin: 20px 0 10px 0;
+                border-radius: 4px;
+                color: #2874a6;
+            }
+            .page-break { 
+                page-break-before: always; 
+            }
+            table { 
+                width: 100%; 
+                border-collapse: collapse; 
+                margin: 15px 0; 
+            }
+            th, td { 
+                padding: 8px; 
+                text-align: left; 
+                border: 1px solid #ddd; 
+            }
+            th { 
+                background-color: #f8f9fa; 
+                font-weight: bold;
+                color: #2874a6;
+            }
+            tr:nth-child(even) {
+                background-color: #f9f9f9;
+            }
+            .availability-section {
+                margin-top: 30px;
+            }
+            .availability-type {
+                display: inline-block;
+                padding: 3px 6px;
+                border-radius: 3px;
+                margin-right: 5px;
+                font-size: 0.85em;
+            }
+            .vacation {
+                background-color: rgba(255,165,0,0.2);
+                border: 1px solid rgba(255,165,0,0.5);
+            }
+            .unavailable {
+                background-color: rgba(255,0,0,0.1);
+                border: 1px solid rgba(255,0,0,0.3);
+            }
+            .lecturer-info {
+                color: #666;
+                font-style: italic;
+            }
+            .color-indicator {
+                display: inline-block;
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                margin-right: 5px;
+            }
+            .footer {
+                font-size: 0.8em;
+                text-align: center;
+                margin-top: 30px;
+                border-top: 1px solid #eee;
+                padding-top: 10px;
+                color: #777;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>Lehrplan Übersicht</h1>
+            <p>Erstellt am {{ current_date }}</p>
+        </div>
+
+        <div class="timeline-section section">
+            <h2>Timeline Übersicht</h2>
+            <img src="data:image/png;base64,{{ timeline_image }}" 
+                 style="max-width: 100%; height: auto; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        </div>
+
+        {% if include_statistics and statistics %}
+        <div class="stats-section section">
+            <h2>Statistische Übersicht</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-title">Anzahl Kurse</div>
+                    <div class="stat-value">{{ statistics.course_count }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Durchschnittliche Kursdauer</div>
+                    <div class="stat-value">{{ statistics.avg_duration }} Tage</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Gesamtzahl Kurstage</div>
+                    <div class="stat-value">{{ statistics.total_days }} Tage</div>
+                </div>
+            </div>
+            
+            {% if statistics.top_lecturers %}
+            <h3>Top Dozenten</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Dozent</th>
+                        <th>Anzahl Kurse</th>
+                        <th>Gesamttage</th>
+                        <th>Tage/Kurs</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lecturer in statistics.top_lecturers %}
+                    <tr>
+                        <td>
+                            <span class="color-indicator" style="background-color: {{ lecturer.color }};"></span>
+                            {{ lecturer.name }}
+                        </td>
+                        <td>{{ lecturer.course_count }}</td>
+                        <td>{{ lecturer.total_days }}</td>
+                        <td>{{ (lecturer.total_days / lecturer.course_count)|round(1) if lecturer.course_count > 0 else 0 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+            
+            {% if statistics.top_topics %}
+            <h3>Häufigste Kursthemen</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Thema</th>
+                        <th>Anzahl</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for topic in statistics.top_topics %}
+                    <tr>
+                        <td>{{ topic.topic }}</td>
+                        <td>{{ topic.count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="page-break"></div>
+
+        <div class="curriculum-section section">
+            <h2>Detaillierte Lehrplan Informationen</h2>
+            {% for batch in batches %}
+            <div class="batch-header">
+                <h3>{{ batch.name }}</h3>
+                <p>Startdatum: {{ batch.start_date.strftime('%d.%m.%Y') }}</p>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Thema</th>
+                        <th>Zeitraum</th>
+                        <th>Dauer</th>
+                        <th>Dozent</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for course in batch.courses %}
+                    <tr>
+                        <td>{{ course.topic }}</td>
+                        <td>{{ course.start_date.strftime('%d.%m.%Y') }} - {{ course.end_date.strftime('%d.%m.%Y') }}</td>
+                        <td>{{ (course.end_date - course.start_date).days + 1 }} Tage</td>
+                        <td>
+                            {% if course.lecturer %}
+                            <span class="color-indicator" style="background-color: {{ course.lecturer.color or '#808080' }};"></span>
+                            {{ course.lecturer.name }}
+                            {% else %}
+                            <span class="lecturer-info">Nicht zugewiesen</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endfor %}
+        </div>
+
+        {% if include_availabilities and availabilities %}
+        <div class="availability-section section">
+            <h2>Dozenten-Verfügbarkeiten</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Dozent</th>
+                        <th>Typ</th>
+                        <th>Zeitraum</th>
+                        <th>Dauer</th>
+                        <th>Notiz</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for availability in availabilities %}
+                    <tr>
+                        <td>{{ availability.lecturer.name }}</td>
+                        <td>
+                            {% if availability.type == 'vacation' %}
+                            <span class="availability-type vacation">Urlaub</span>
+                            {% else %}
+                            <span class="availability-type unavailable">Nicht verfügbar</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ availability.start_date.strftime('%d.%m.%Y') }} - {{ availability.end_date.strftime('%d.%m.%Y') }}</td>
+                        <td>{{ (availability.end_date - availability.start_date).days + 1 }} Tage</td>
+                        <td>{{ availability.note }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            Lehrplan-Timeline-System | Berichtsdatum: {{ current_date }}
+        </div>
+    </body>
+    </html>
+    

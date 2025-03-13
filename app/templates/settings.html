@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-cog"></i> Einstellungen</h2>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    <div class="card mb-3">
+                        <div class="card-header">Arbeitszeiten</div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label class="form-label">Arbeitsbeginn</label>
+                                    <input type="time" class="form-control" name="working_hours_start"
+                                           value="{{ settings.working_hours_start }}">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Arbeitsende</label>
+                                    <input type="time" class="form-control" name="working_hours_end"
+                                           value="{{ settings.working_hours_end }}">
+                                </div>
+                            </div>
+                            <div class="mt-3">
+                                <label class="form-label">Arbeitstage</label>
+                                <div class="btn-group d-flex" role="group">
+                                    {% for day in ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] %}
+                                    <input type="checkbox" class="btn-check" name="working_days" 
+                                           id="day{{ loop.index }}" value="{{ loop.index }}"
+                                           {% if loop.index|string in settings.working_days %}checked{% endif %}>
+                                    <label class="btn btn-outline-primary" for="day{{ loop.index }}">
+                                        {{ day }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header">Darstellung</div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label">Farbschema</label>
+                                <select class="form-select" name="color_scheme">
+                                    <option value="default" {% if settings.color_scheme == 'default' %}selected{% endif %}>
+                                        Standard
+                                    </option>
+                                    <option value="pastel" {% if settings.color_scheme == 'pastel' %}selected{% endif %}>
+                                        Pastell
+                                    </option>
+                                    <option value="contrast" {% if settings.color_scheme == 'contrast' %}selected{% endif %}>
+                                        Kontrast
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header">Benachrichtigungen</div>
+                        <div class="card-body">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="notify_conflicts" 
+                                       id="notifyConflicts" value="true"
+                                       {% if settings.notify_conflicts == 'true' %}checked{% endif %}>
+                                <label class="form-check-label" for="notifyConflicts">
+                                    Bei Konflikten benachrichtigen
+                                </label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="notify_assignments"
+                                       id="notifyAssignments" value="true"
+                                       {% if settings.notify_assignments == 'true' %}checked{% endif %}>
+                                <label class="form-check-label" for="notifyAssignments">
+                                    Bei neuen Zuweisungen benachrichtigen
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Einstellungen speichern
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

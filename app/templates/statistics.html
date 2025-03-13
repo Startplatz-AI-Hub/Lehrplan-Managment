@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+<style>
+    .stats-card {
+        transition: all 0.3s ease;
+        border-radius: 0.5rem;
+        overflow: hidden;
+    }
+    
+    .stats-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+    
+    .big-number {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #495057;
+    }
+    
+    .stat-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .chart-container {
+        position: relative;
+        height: 280px;
+        width: 100%;
+    }
+    
+    .card-header {
+        background-color: white;
+        border-bottom: 1px solid rgba(0,0,0,0.125);
+        padding: 1rem;
+    }
+    
+    .card-header h5 {
+        margin-bottom: 0;
+    }
+    
+    .data-table {
+        font-size: 0.9rem;
+    }
+    
+    .data-table th {
+        font-weight: 600;
+    }
+    
+    .info-icon {
+        color: #6c757d;
+        cursor: pointer;
+    }
+    
+    .lecturer-color {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h1><i class="fas fa-chart-bar"></i> Statistik-Dashboard</h1>
+            <div class="btn-group">
+                <a href="{{ url_for('main.show_timeline') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-calendar-alt"></i> Zur Timeline
+                </a>
+                <a href="{{ url_for('main.calendar_view') }}" class="btn btn-outline-success">
+                    <i class="fas fa-calendar"></i> Zum Kalender
+                </a>
+            </div>
+        </div>
+        <p class="lead text-muted">Übersicht über Kursverteilung, Dozentenauslastung und Zeitplanung</p>
+    </div>
+</div>
+
+<!-- Key Metrics -->
+<div class="row mb-4">
+    <div class="col-md-4 mb-3">
+        <div class="card stats-card h-100 border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="stat-label">Aktive Kurse</div>
+                <div class="big-number">{{ course_count }}</div>
+                <div class="mt-3 text-muted">
+                    <i class="fas fa-book"></i> Ø {{ avg_duration }} Tage pro Kurs
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card stats-card h-100 border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="stat-label">Dozenten</div>
+                <div class="big-number">{{ lecturer_count }}</div>
+                <div class="mt-3 text-muted">
+                    <i class="fas fa-user-tie"></i> {% if lecturer_count > 0 %}{{ (course_count / lecturer_count)|round(1) }} Kurse pro Dozent{% else %}Keine Dozenten{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card stats-card h-100 border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="stat-label">Lehrpläne</div>
+                <div class="big-number">{{ curriculum_count }}</div>
+                <div class="mt-3 text-muted">
+                    <i class="fas fa-graduation-cap"></i> {% if curriculum_count > 0 %}{{ (course_count / curriculum_count)|round(1) }} Kurse pro Lehrplan{% else %}Keine Lehrpläne{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <!-- Dozenten-Auslastung -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-user-clock"></i> Dozenten-Auslastung (Top 10)</h5>
+                <span class="info-icon" data-bs-toggle="tooltip" title="Gesamte Kurstage pro Dozent">
+                    <i class="fas fa-info-circle"></i>
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="lecturerChart"></canvas>
+                </div>
+            </div>
+            <div class="card-footer bg-white">
+                <div class="table-responsive">
+                    <table class="table table-sm data-table">
+                        <thead>
+                            <tr>
+                                <th>Dozent</th>
+                                <th>Kurse</th>
+                                <th>Tage</th>
+                                <th>Tage/Kurs</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for lecturer in lecturer_workload %}
+                            <tr>
+                                <td>
+                                    <span class="lecturer-color" style="background-color: {{ lecturer.color or '#808080' }}"></span>
+                                    {{ lecturer.name }}
+                                </td>
+                                <td>{{ lecturer.course_count }}</td>
+                                <td>{{ lecturer.total_days|int if lecturer.total_days else 0 }}</td>
+                                <td>{{ (lecturer.total_days / lecturer.course_count)|round(1) if lecturer.course_count > 0 and lecturer.total_days else 0 }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Kursthemen-Verteilung -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-tags"></i> Kursthemen (Top 10)</h5>
+                <span class="info-icon" data-bs-toggle="tooltip" title="Anzahl der Kurse pro Thema">
+                    <i class="fas fa-info-circle"></i>
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="topicsChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <!-- Zeitliche Verteilung -->
+    <div class="col-lg-8 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-calendar-alt"></i> Zeitliche Verteilung der Kurse</h5>
+                <span class="info-icon" data-bs-toggle="tooltip" title="Anzahl der Kurse pro Monat (±6 Monate)">
+                    <i class="fas fa-info-circle"></i>
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="monthlyChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Wochentags-Verteilung -->
+    <div class="col-lg-4 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-calendar-week"></i> Verteilung nach Wochentagen</h5>
+                <span class="info-icon" data-bs-toggle="tooltip" title="Kursstarts pro Wochentag">
+                    <i class="fas fa-info-circle"></i>
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="weekdayChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <!-- Kursdauer-Verteilung -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-hourglass-half"></i> Kursdauer-Verteilung</h5>
+                <span class="info-icon" data-bs-toggle="tooltip" title="Anzahl der Kurse nach Dauer in Tagen">
+                    <i class="fas fa-info-circle"></i>
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="durationChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Dozenten mit den meisten Verfügbarkeitseinträgen -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-calendar-times"></i> Verfügbarkeitseinträge</h5>
+                <span class="info-icon" data-bs-toggle="tooltip" title="Dozenten mit den meisten Verfügbarkeitseinträgen (Urlaub/Nicht verfügbar)">
+                    <i class="fas fa-info-circle"></i>
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="availabilityChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Tooltips initialisieren
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // Chart-Konfiguration
+    const chartConfig = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    usePointStyle: true,
+                    padding: 20
+                }
+            }
+        }
+    };
+    
+    // Dozenten-Auslastungschart
+    const lecturerCtx = document.getElementById('lecturerChart').getContext('2d');
+    const lecturerData = {
+        labels: [{% for lecturer in lecturer_workload %}'{{ lecturer.name }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+        datasets: [{
+            label: 'Kurstage',
+            data: [{% for lecturer in lecturer_workload %}{{ lecturer.total_days|int if lecturer.total_days else 0 }}{% if not loop.last %}, {% endif %}{% endfor %}],
+            backgroundColor: [{% for lecturer in lecturer_workload %}'{{ lecturer.color or "#808080" }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+            borderColor: [{% for lecturer in lecturer_workload %}'{{ lecturer.color or "#808080" }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+            borderWidth: 1
+        }]
+    };
+    new Chart(lecturerCtx, {
+        type: 'bar',
+        data: lecturerData,
+        options: Object.assign({}, chartConfig, {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Anzahl Kurstage'
+                    }
+                }
+            }
+        })
+    });
+    
+    // Kursthemen-Chart
+    const topicsCtx = document.getElementById('topicsChart').getContext('2d');
+    const topicsData = {
+        labels: [{% for topic, count in topics %}'{{ topic[:20] + "..." if topic|length > 20 else topic }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+        datasets: [{
+            label: 'Anzahl Kurse',
+            data: [{% for topic, count in topics %}{{ count }}{% if not loop.last %}, {% endif %}{% endfor %}],
+            backgroundColor: [
+                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                '#FF9F40', '#C9CBCF', '#7FFF00', '#6495ED', '#FF8C00'
+            ]
+        }]
+    };
+    new Chart(topicsCtx, {
+        type: 'pie',
+        data: topicsData,
+        options: chartConfig
+    });
+    
+    // Monatliche Kursverteilung
+    const monthlyCtx = document.getElementById('monthlyChart').getContext('2d');
+    const monthlyData = {
+        labels: {{ months|tojson }},
+        datasets: [{
+            label: 'Anzahl Kurse',
+            data: {{ course_counts|tojson }},
+            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+            borderColor: 'rgba(54, 162, 235, 1)',
+            borderWidth: 1,
+            tension: 0.4,
+            fill: true
+        }]
+    };
+    new Chart(monthlyCtx, {
+        type: 'line',
+        data: monthlyData,
+        options: Object.assign({}, chartConfig, {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        precision: 0
+                    }
+                }
+            }
+        })
+    });
+    
+    // Wochentags-Chart
+    const weekdayCtx = document.getElementById('weekdayChart').getContext('2d');
+    const weekdayData = {
+        labels: {{ weekdays|tojson }},
+        datasets: [{
+            label: 'Kursstarts',
+            data: {{ weekday_data|tojson }},
+            backgroundColor: [
+                'rgba(255, 99, 132, 0.5)',
+                'rgba(54, 162, 235, 0.5)',
+                'rgba(255, 206, 86, 0.5)',
+                'rgba(75, 192, 192, 0.5)',
+                'rgba(153, 102, 255, 0.5)',
+                'rgba(255, 159, 64, 0.5)',
+                'rgba(201, 203, 207, 0.5)'
+            ],
+            borderWidth: 1
+        }]
+    };
+    new Chart(weekdayCtx, {
+        type: 'polarArea',
+        data: weekdayData,
+        options: chartConfig
+    });
+    
+    // Kursdauer-Chart
+    const durationCtx = document.getElementById('durationChart').getContext('2d');
+    const durationData = {
+        labels: {{ durations|tojson }},
+        datasets: [{
+            label: 'Anzahl Kurse',
+            data: {{ duration_counts|tojson }},
+            backgroundColor: 'rgba(153, 102, 255, 0.5)',
+            borderColor: 'rgba(153, 102, 255, 1)',
+            borderWidth: 1
+        }]
+    };
+    new Chart(durationCtx, {
+        type: 'bar',
+        data: durationData,
+        options: Object.assign({}, chartConfig, {
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Dauer in Tagen'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        precision: 0
+                    }
+                }
+            }
+        })
+    });
+    
+    // Verfügbarkeits-Chart
+    const availabilityCtx = document.getElementById('availabilityChart').getContext('2d');
+    const availabilityData = {
+        labels: [
+            {% for lecturer in lecturers_with_availabilities %}
+            '{{ lecturer.name }}'{% if not loop.last %}, {% endif %}
+            {% endfor %}
+        ],
+        datasets: [{
+            label: 'Verfügbarkeitseinträge',
+            data: [
+                {% for lecturer in lecturers_with_availabilities %}
+                {{ lecturer.availability_count }}{% if not loop.last %}, {% endif %}
+                {% endfor %}
+            ],
+            backgroundColor: [
+                '#FF9F40', '#C9CBCF', '#7FFF00', '#6495ED', '#FF8C00'
+            ]
+        }]
+    };
+    new Chart(availabilityCtx, {
+        type: 'doughnut',
+        data: availabilityData,
+        options: chartConfig
+    });
+});
+</script>
+{% endblock %} 

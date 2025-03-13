@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-tasks"></i> Lehrpläne verwalten</h2>
+                <div>
+                    <a href="{{ url_for('main.create_curriculum') }}" class="btn btn-primary">
+                        <i class="fas fa-plus-circle"></i> Neuer Lehrplan
+                    </a>
+                    <a href="{{ url_for('main.add_course') }}" class="btn btn-info">
+                        <i class="fas fa-plus"></i> Kurs hinzufügen
+                    </a>
+                    <a href="{{ url_for('main.show_timeline') }}" class="btn btn-secondary">
+                        <i class="fas fa-calendar-alt"></i> Timeline
+                    </a>
+                    <a href="{{ url_for('main.duplicate_curriculum') }}" class="btn btn-success">
+                        <i class="fas fa-copy"></i> Lehrplan duplizieren
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if curricula %}
+                    {% for curriculum_id, curriculum in curricula.items() %}
+                    <div class="card mb-3">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                {{ curriculum.batch_name }} 
+                                (Start: {{ curriculum.start_date.strftime('%d.%m.%Y') }})
+                            </h5>
+                            <div class="form-check form-switch">
+                                <form method="post" class="d-inline">
+                                    <input type="hidden" name="action" value="toggle_timeline">
+                                    <input type="hidden" name="curriculum_id" value="{{ curriculum_id }}">
+                                    <input type="hidden" name="show_in_timeline" value="{{ 'false' if curriculum.active else 'true' }}">
+                                    <button type="submit" class="btn btn-{{ 'success' if curriculum.active else 'secondary' }}">
+                                        <i class="fas fa-{{ 'eye' if curriculum.active else 'eye-slash' }}"></i>
+                                        {{ 'In Timeline sichtbar' if curriculum.active else 'Nicht in Timeline' }}
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Thema</th>
+                                            <th>Startdatum</th>
+                                            <th>Enddatum</th>
+                                            <th>Dozent</th>
+                                            <th>Aktionen</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for course in curriculum.courses %}
+                                        <tr id="course-{{ course.id }}">
+                                            <td>
+                                                <span class="course-view">{{ course.topic }}</span>
+                                                <input type="text" class="form-control course-edit d-none" 
+                                                       value="{{ course.topic }}">
+                                            </td>
+                                            <td>
+                                                <span class="course-view">{{ course.start_date.strftime('%d.%m.%Y') }}</span>
+                                                <input type="date" class="form-control course-edit d-none" 
+                                                       value="{{ course.start_date.strftime('%Y-%m-%d') }}">
+                                            </td>
+                                            <td>
+                                                <span class="course-view">{{ course.end_date.strftime('%d.%m.%Y') }}</span>
+                                                <input type="date" class="form-control course-edit d-none" 
+                                                       value="{{ course.end_date.strftime('%Y-%m-%d') }}">
+                                            </td>
+                                            <td>
+                                                {% if course.lecturer %}
+                                                    <span style="color: {{ course.lecturer.color }}">
+                                                        {{ course.lecturer.name }}
+                                                    </span>
+                                                {% else %}
+                                                    <span class="text-muted">Nicht zugewiesen</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <div class="btn-group course-view">
+                                                    <button class="btn btn-sm btn-primary edit-btn" 
+                                                            onclick="toggleEdit('{{ course.id }}')">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                    <form method="post" class="d-inline" 
+                                                          onsubmit="return confirm('Wirklich löschen?');">
+                                                        <input type="hidden" name="course_id" value="{{ course.id }}">
+                                                        <input type="hidden" name="action" value="delete">
+                                                        <button type="submit" class="btn btn-sm btn-danger">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                                <div class="btn-group course-edit d-none">
+                                                    <form method="post" class="d-inline">
+                                                        <input type="hidden" name="course_id" value="{{ course.id }}">
+                                                        <input type="hidden" name="action" value="update">
+                                                        <input type="hidden" name="topic" class="topic-input">
+                                                        <input type="hidden" name="start_date" class="start-date-input">
+                                                        <input type="hidden" name="end_date" class="end-date-input">
+                                                        <button type="submit" class="btn btn-sm btn-success">
+                                                            <i class="fas fa-save"></i>
+                                                        </button>
+                                                    </form>
+                                                    <button class="btn btn-sm btn-secondary" 
+                                                            onclick="toggleEdit('{{ course.id }}')">
+                                                        <i class="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="alert alert-info">
+                        <h5><i class="fas fa-info-circle"></i> Keine Lehrpläne vorhanden</h5>
+                        <p>Es wurden noch keine Lehrpläne hochgeladen. 
+                            <a href="{{ url_for('main.index') }}">Laden Sie einen Lehrplan hoch</a>.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleEdit(courseId) {
+    const row = document.getElementById(`course-${courseId}`);
+    const viewElements = row.querySelectorAll('.course-view');
+    const editElements = row.querySelectorAll('.course-edit');
+    
+    if (viewElements[0].classList.contains('d-none')) {
+        // Speichern
+        const topicInput = row.querySelector('input[type="text"]');
+        const startDateInput = row.querySelector('input[type="date"]:nth-of-type(1)');
+        const endDateInput = row.querySelector('input[type="date"]:nth-of-type(2)');
+        
+        row.querySelector('.topic-input').value = topicInput.value;
+        row.querySelector('.start-date-input').value = startDateInput.value;
+        row.querySelector('.end-date-input').value = endDateInput.value;
+    }
+    
+    viewElements.forEach(el => el.classList.toggle('d-none'));
+    editElements.forEach(el => el.classList.toggle('d-none'));
+}
+</script>
+{% endblock %} 

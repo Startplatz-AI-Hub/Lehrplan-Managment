@@ -1,0 +1,19 @@
+project/
+├── app/
+│   ├── __init__.py
+│   ├── routes.py
+│   ├── models.py
+│   └── utils.py
+├── static/
+│   ├── css/
+│   │   └── style.css
+│   └── js/
+│       └── main.js
+├── templates/
+│   ├── base.html
+│   ├── index.html
+│   └── timeline.html
+├── instance/
+│   └── database.db
+├── config.py
+└── run.py 

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-plus-circle"></i> Kurs hinzufügen</h2>
+                <div>
+                    <a href="{{ url_for('main.manage_curriculum') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-tasks"></i> Lehrpläne verwalten
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                <form id="addCourseForm" method="post" action="{{ url_for('main.add_course') }}">
+                    <div class="mb-3">
+                        <label for="curriculum_id" class="form-label">Lehrplan auswählen</label>
+                        <select class="form-select" id="curriculum_id" name="curriculum_id" required>
+                            <option value="" selected disabled>Bitte wählen Sie einen Lehrplan</option>
+                            {% for curriculum_id, curriculum in curricula.items() %}
+                            <option value="{{ curriculum_id }}">
+                                {{ curriculum.batch_name }} ({{ curriculum.start_date.strftime('%d.%m.%Y') }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label for="course_topic" class="form-label">Kursthema</label>
+                            <input type="text" class="form-control" id="course_topic" name="course_topic" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="course_start_date" class="form-label">Startdatum</label>
+                            <input type="date" class="form-control" id="course_start_date" name="course_start_date" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="course_end_date" class="form-label">Enddatum</label>
+                            <input type="date" class="form-control" id="course_end_date" name="course_end_date" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="lecturer_id" class="form-label">Dozent (optional)</label>
+                        <select class="form-select" id="lecturer_id" name="lecturer_id">
+                            <option value="">Keinen Dozenten zuweisen</option>
+                            {% for lecturer in lecturers %}
+                            <option value="{{ lecturer.id }}">{{ lecturer.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="is_active" name="is_active" checked>
+                            <label class="form-check-label" for="is_active">In Timeline anzeigen</label>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Kurs hinzufügen
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Set default dates
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('course_start_date').value = today;
+    
+    const defaultEndDate = new Date();
+    defaultEndDate.setDate(defaultEndDate.getDate() + 5);
+    document.getElementById('course_end_date').value = defaultEndDate.toISOString().split('T')[0];
+    
+    // Date validation
+    const startInput = document.getElementById('course_start_date');
+    const endInput = document.getElementById('course_end_date');
+    
+    function validateDates() {
+        if (startInput.value && endInput.value) {
+            if (new Date(endInput.value) < new Date(startInput.value)) {
+                endInput.setCustomValidity('Das Enddatum darf nicht vor dem Startdatum liegen');
+            } else {
+                endInput.setCustomValidity('');
+            }
+        }
+    }
+    
+    startInput.addEventListener('change', validateDates);
+    endInput.addEventListener('change', validateDates);
+});
+</script>
+{% endblock %} 

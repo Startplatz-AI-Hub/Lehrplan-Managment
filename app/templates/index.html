@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1>Lehrplan-Management</h1>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="fas fa-upload fa-3x mb-3 text-primary"></i>
+                <h5 class="card-title">Lehrplan hochladen</h5>
+                <p class="card-text">Laden Sie einen neuen Lehrplan im CSV-Format hoch.</p>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" data-bs-toggle="collapse" data-bs-target="#uploadForm">
+                        Hochladen
+                    </button>
+                    <a href="{{ url_for('main.download_template') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-download"></i> CSV-Vorlage herunterladen
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="fas fa-plus-circle fa-3x mb-3 text-success"></i>
+                <h5 class="card-title">Lehrplan erstellen</h5>
+                <p class="card-text">Erstellen Sie einen neuen Lehrplan manuell.</p>
+                <a href="{{ url_for('main.create_curriculum') }}" class="btn btn-success">Erstellen</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="fas fa-user-plus fa-3x mb-3 text-info"></i>
+                <h5 class="card-title">Dozenten verwalten</h5>
+                <p class="card-text">Fügen Sie neue Dozenten hinzu oder bearbeiten Sie bestehende.</p>
+                <a href="{{ url_for('main.add_lecturer') }}" class="btn btn-info text-white">Verwalten</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="fas fa-calendar-alt fa-3x mb-3 text-primary"></i>
+                <h5 class="card-title">Timeline anzeigen</h5>
+                <p class="card-text">Sehen Sie sich die aktuelle Zeitplanung an.</p>
+                <a href="{{ url_for('main.show_timeline') }}" class="btn btn-primary">Anzeigen</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="collapse" id="uploadForm">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Lehrplan hochladen</h2>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <h5><i class="fas fa-info-circle"></i> Hinweise zum CSV-Format:</h5>
+                        <ul>
+                            <li>Die CSV-Datei muss die Spalten "Thema", "Startdatum" und "Enddatum" enthalten</li>
+                            <li>Datumsformat: TT.MM.YYYY (z.B. 01.01.2024)</li>
+                            <li>Laden Sie sich die Vorlage herunter, um das korrekte Format zu sehen</li>
+                        </ul>
+                    </div>
+                    <form id="uploadForm" enctype="multipart/form-data" method="post" action="{{ url_for('main.upload_file') }}">
+                        <div class="mb-3">
+                            <label for="file" class="form-label">CSV-Datei auswählen</label>
+                            <input type="file" class="form-control" id="file" name="file" accept=".csv" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="start_date" class="form-label">Startdatum für den Lehrplan</label>
+                            <input type="date" class="form-control" id="start_date" name="start_date" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="duplicate_count" class="form-label">Anzahl Wiederholungen</label>
+                            <input type="number" class="form-control" id="duplicate_count" name="duplicate_count" 
+                                   min="0" max="10" value="0">
+                            <small class="form-text text-muted">
+                                Wie oft soll der Lehrplan wiederholt werden? (0 = keine Wiederholung)
+                            </small>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-upload"></i> Hochladen
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

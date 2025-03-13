@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-copy"></i> Lehrplan duplizieren</h2>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <h5><i class="fas fa-info-circle"></i> Hinweis:</h5>
+                    <p>Wählen Sie einen existierenden Lehrplan aus und geben Sie das neue Startdatum an. 
+                    Alle Kurse werden entsprechend verschoben.</p>
+                </div>
+                
+                {% if curricula %}
+                <form method="post">
+                    <div class="mb-3">
+                        <label for="curriculum_id" class="form-label">Existierenden Lehrplan auswählen</label>
+                        <select class="form-select" id="curriculum_id" name="curriculum_id" required>
+                            <option value="">Bitte wählen...</option>
+                            {% for curriculum in curricula %}
+                            <option value="{{ curriculum.curriculum_id }}">
+                                Lehrplan vom {{ curriculum.start_date.strftime('%d.%m.%Y') }} 
+                                ({{ curriculum.course_count }} Kurse)
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="start_date" class="form-label">Neues Startdatum</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date" required>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-copy"></i> Lehrplan duplizieren
+                        </button>
+                        <a href="{{ url_for('main.show_timeline') }}" class="btn btn-secondary">
+                            <i class="fas fa-calendar-alt"></i> Zurück zur Timeline
+                        </a>
+                    </div>
+                </form>
+                {% else %}
+                <div class="alert alert-warning">
+                    <h5><i class="fas fa-exclamation-triangle"></i> Keine Lehrpläne gefunden</h5>
+                    <p>Es wurden noch keine Lehrpläne hochgeladen. 
+                        <a href="{{ url_for('main.index') }}">Laden Sie zuerst einen Lehrplan hoch</a>.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

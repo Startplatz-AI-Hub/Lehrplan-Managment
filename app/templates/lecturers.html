@@ -1,0 +1,482 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card shadow mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+        <h2 class="mb-0"><i class="fas fa-chalkboard-teacher"></i> Dozenten verwalten</h2>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addLecturerModal">
+            <i class="fas fa-user-plus"></i> Neuer Dozent
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="bg-light">
+                    <tr>
+                        <th style="width: 50px">Farbe</th>
+                        <th>Name</th>
+                        <th>Zugewiesene Kurse</th>
+                        <th>Verfügbarkeit</th>
+                        <th style="width: 150px">Aktionen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lecturer in lecturers %}
+                    <tr>
+                        <td>
+                            <div class="color-preview" style="background-color: {{ lecturer.color or '#808080' }}"></div>
+                        </td>
+                        <td>{{ lecturer.name }}</td>
+                        <td>{{ lecturer.courses|length }} Kurse</td>
+                        <td>
+                            {% set vacation_count = lecturer.availabilities|selectattr('type', 'equalto', 'vacation')|list|length %}
+                            {% set unavailable_count = lecturer.availabilities|selectattr('type', 'equalto', 'unavailable')|list|length %}
+                            <span class="badge bg-warning text-dark me-2" title="Urlaub">
+                                <i class="fas fa-umbrella-beach"></i> {{ vacation_count }}
+                            </span>
+                            <span class="badge bg-danger" title="Nicht verfügbar">
+                                <i class="fas fa-ban"></i> {{ unavailable_count }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-primary" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#editLecturerModal" 
+                                        data-id="{{ lecturer.id }}" 
+                                        data-name="{{ lecturer.name }}" 
+                                        data-color="{{ lecturer.color or '#808080' }}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-outline-success" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#addAvailabilityModal" 
+                                        data-id="{{ lecturer.id }}" 
+                                        data-name="{{ lecturer.name }}">
+                                    <i class="fas fa-calendar-alt"></i>
+                                </button>
+                                <button class="btn btn-outline-danger delete-lecturer" 
+                                        data-id="{{ lecturer.id }}" 
+                                        data-name="{{ lecturer.name }}">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center py-4">
+                            <div class="alert alert-info mb-0">
+                                Keine Dozenten vorhanden. Erstellen Sie einen neuen Dozenten mit dem Button oben rechts.
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Verfügbarkeiten anzeigen -->
+<div class="card shadow">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+        <h2 class="mb-0"><i class="fas fa-calendar-alt"></i> Verfügbarkeiten</h2>
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="filterCurrentAvailabilities" checked>
+            <label class="form-check-label" for="filterCurrentAvailabilities">Nur aktuelle anzeigen</label>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover" id="availabilityTable">
+                <thead class="bg-light">
+                    <tr>
+                        <th>Dozent</th>
+                        <th>Typ</th>
+                        <th>Von</th>
+                        <th>Bis</th>
+                        <th>Notiz</th>
+                        <th style="width: 100px">Aktionen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for availability in availabilities %}
+                    <tr class="availability-row {% if availability.end_date < current_date %}past-availability{% endif %}">
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="color-preview me-2" style="background-color: {{ availability.lecturer.color or '#808080' }}"></div>
+                                {{ availability.lecturer.name }}
+                            </div>
+                        </td>
+                        <td>
+                            {% if availability.type == 'vacation' %}
+                            <span class="badge bg-warning text-dark">
+                                <i class="fas fa-umbrella-beach"></i> Urlaub
+                            </span>
+                            {% else %}
+                            <span class="badge bg-danger">
+                                <i class="fas fa-ban"></i> Nicht verfügbar
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td>{{ availability.start_date.strftime('%d.%m.%Y') }}</td>
+                        <td>{{ availability.end_date.strftime('%d.%m.%Y') }}</td>
+                        <td>{{ availability.note or '-' }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-danger delete-availability" 
+                                        data-id="{{ availability.id }}">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr id="no-availabilities-row">
+                        <td colspan="6" class="text-center py-4">
+                            <div class="alert alert-info mb-0">
+                                Keine Verfügbarkeiten definiert. Fügen Sie eine neue Verfügbarkeit über den Kalender-Button bei einem Dozenten hinzu.
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Dozent hinzufügen -->
+<div class="modal fade" id="addLecturerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-user-plus"></i> Neuen Dozenten anlegen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{{ url_for('main.add_lecturer') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Name des Dozenten</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="color" class="form-label">Farbe</label>
+                        <div class="d-flex">
+                            <input type="color" class="form-control form-control-color me-2" 
+                                  id="color" name="color" value="#3498db">
+                            <select class="form-select color-presets">
+                                <option value="">Farbe wählen...</option>
+                                {% for color in colors %}
+                                <option value="{{ color.hex }}">{{ color.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <small class="text-muted">Die Farbe wird für die Anzeige in der Timeline verwendet.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Dozent bearbeiten -->
+<div class="modal fade" id="editLecturerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-edit"></i> Dozent bearbeiten</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{{ url_for('main.add_lecturer') }}">
+                <input type="hidden" name="lecturer_id" id="edit_lecturer_id">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="edit_name" class="form-label">Name des Dozenten</label>
+                        <input type="text" class="form-control" id="edit_name" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_color" class="form-label">Farbe</label>
+                        <div class="d-flex">
+                            <input type="color" class="form-control form-control-color me-2" 
+                                  id="edit_color" name="color">
+                            <select class="form-select color-presets">
+                                <option value="">Farbe wählen...</option>
+                                {% for color in colors %}
+                                <option value="{{ color.hex }}">{{ color.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Verfügbarkeit hinzufügen -->
+<div class="modal fade" id="addAvailabilityModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-calendar-alt"></i> Verfügbarkeit hinzufügen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{{ url_for('main.manage_lecturers') }}">
+                <input type="hidden" name="lecturer_id" id="availability_lecturer_id">
+                <input type="hidden" name="action" value="add_availability">
+                <div class="modal-body">
+                    <h6 class="lecturer-name mb-3"></h6>
+                    <div class="mb-3">
+                        <label class="form-label">Typ</label>
+                        <div class="d-flex">
+                            <div class="form-check me-4">
+                                <input class="form-check-input" type="radio" name="type" id="type_vacation" value="vacation" checked>
+                                <label class="form-check-label" for="type_vacation">
+                                    <i class="fas fa-umbrella-beach text-warning"></i> Urlaub
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="type" id="type_unavailable" value="unavailable">
+                                <label class="form-check-label" for="type_unavailable">
+                                    <i class="fas fa-ban text-danger"></i> Nicht verfügbar
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="start_date" class="form-label">Von</label>
+                            <input type="date" class="form-control" id="start_date" name="start_date" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="end_date" class="form-label">Bis</label>
+                            <input type="date" class="form-control" id="end_date" name="end_date" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="note" class="form-label">Notiz (optional)</label>
+                        <textarea class="form-control" id="note" name="note" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="check_conflicts" name="check_conflicts" checked>
+                            <label class="form-check-label" for="check_conflicts">
+                                Auf Konflikte mit zugewiesenen Kursen prüfen
+                            </label>
+                        </div>
+                        <small class="text-muted">
+                            Wenn aktiviert, wird eine Warnung angezeigt, falls der Dozent während des gewählten Zeitraums Kurse hat.
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.color-preview {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    display: inline-block;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+
+.past-availability {
+    opacity: 0.6;
+}
+
+/* Responsive columns for smaller screens */
+@media (max-width: 767.98px) {
+    .table-responsive {
+        font-size: 0.9rem;
+    }
+    
+    .btn-group-sm > .btn {
+        padding: 0.25rem 0.4rem;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Filter für Verfügbarkeiten
+    const filterCheckbox = document.getElementById('filterCurrentAvailabilities');
+    const pastAvailabilities = document.querySelectorAll('.past-availability');
+    const noAvailabilitiesRow = document.getElementById('no-availabilities-row');
+    
+    function updateAvailabilityFilter() {
+        const showOnlyCurrent = filterCheckbox.checked;
+        let visibleCount = 0;
+        
+        pastAvailabilities.forEach(row => {
+            if (showOnlyCurrent) {
+                row.style.display = 'none';
+            } else {
+                row.style.display = '';
+                visibleCount++;
+            }
+        });
+        
+        // Show "no availabilities" message if all are filtered out
+        const availabilityRows = document.querySelectorAll('.availability-row:not(.past-availability)');
+        if (availabilityRows.length === 0 && (showOnlyCurrent || visibleCount === 0)) {
+            if (noAvailabilitiesRow) noAvailabilitiesRow.style.display = '';
+        } else {
+            if (noAvailabilitiesRow) noAvailabilitiesRow.style.display = 'none';
+        }
+    }
+    
+    if (filterCheckbox) {
+        filterCheckbox.addEventListener('change', updateAvailabilityFilter);
+        updateAvailabilityFilter(); // Initial call
+    }
+    
+    // Color picker presets
+    document.querySelectorAll('.color-presets').forEach(select => {
+        select.addEventListener('change', function() {
+            const colorInput = this.closest('.d-flex').querySelector('input[type="color"]');
+            if (colorInput && this.value) {
+                colorInput.value = this.value;
+            }
+        });
+    });
+    
+    // Edit lecturer modal
+    document.getElementById('editLecturerModal').addEventListener('show.bs.modal', function(event) {
+        const button = event.relatedTarget;
+        const id = button.getAttribute('data-id');
+        const name = button.getAttribute('data-name');
+        const color = button.getAttribute('data-color');
+        
+        this.querySelector('#edit_lecturer_id').value = id;
+        this.querySelector('#edit_name').value = name;
+        this.querySelector('#edit_color').value = color;
+    });
+    
+    // Availability modal
+    document.getElementById('addAvailabilityModal').addEventListener('show.bs.modal', function(event) {
+        const button = event.relatedTarget;
+        const id = button.getAttribute('data-id');
+        const name = button.getAttribute('data-name');
+        
+        this.querySelector('#availability_lecturer_id').value = id;
+        this.querySelector('.lecturer-name').textContent = `Dozent: ${name}`;
+        
+        // Set default dates to current week
+        const today = new Date();
+        const start = new Date(today);
+        start.setDate(today.getDate() + 1); // Tomorrow
+        const end = new Date(today);
+        end.setDate(today.getDate() + 5); // 5 days from now
+        
+        this.querySelector('#start_date').value = formatDate(start);
+        this.querySelector('#end_date').value = formatDate(end);
+    });
+    
+    // Date validation
+    document.querySelectorAll('input[type="date"]').forEach(input => {
+        input.addEventListener('change', function() {
+            validateDates(this.form);
+        });
+    });
+    
+    function validateDates(form) {
+        const startInput = form.querySelector('input[name="start_date"]');
+        const endInput = form.querySelector('input[name="end_date"]');
+        
+        if (startInput && endInput && startInput.value && endInput.value) {
+            const startDate = new Date(startInput.value);
+            const endDate = new Date(endInput.value);
+            
+            if (endDate < startDate) {
+                endInput.setCustomValidity('End date must be after start date');
+                endInput.reportValidity();
+            } else {
+                endInput.setCustomValidity('');
+            }
+        }
+    }
+    
+    // Delete confirmation for lecturers
+    document.querySelectorAll('.delete-lecturer').forEach(button => {
+        button.addEventListener('click', function() {
+            const id = this.getAttribute('data-id');
+            const name = this.getAttribute('data-name');
+            
+            if (confirm(`Sind Sie sicher, dass Sie den Dozenten "${name}" löschen möchten? Alle zugewiesenen Kurse werden auf "Nicht zugewiesen" gesetzt.`)) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = "{{ url_for('main.manage_lecturers') }}";
+                
+                const actionInput = document.createElement('input');
+                actionInput.type = 'hidden';
+                actionInput.name = 'action';
+                actionInput.value = 'delete_lecturer';
+                
+                const idInput = document.createElement('input');
+                idInput.type = 'hidden';
+                idInput.name = 'lecturer_id';
+                idInput.value = id;
+                
+                form.appendChild(actionInput);
+                form.appendChild(idInput);
+                document.body.appendChild(form);
+                form.submit();
+            }
+        });
+    });
+    
+    // Delete confirmation for availabilities
+    document.querySelectorAll('.delete-availability').forEach(button => {
+        button.addEventListener('click', function() {
+            const id = this.getAttribute('data-id');
+            
+            if (confirm('Sind Sie sicher, dass Sie diesen Eintrag löschen möchten?')) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = "{{ url_for('main.manage_lecturers') }}";
+                
+                const actionInput = document.createElement('input');
+                actionInput.type = 'hidden';
+                actionInput.name = 'action';
+                actionInput.value = 'delete_availability';
+                
+                const idInput = document.createElement('input');
+                idInput.type = 'hidden';
+                idInput.name = 'availability_id';
+                idInput.value = id;
+                
+                form.appendChild(actionInput);
+                form.appendChild(idInput);
+                document.body.appendChild(form);
+                form.submit();
+            }
+        });
+    });
+    
+    // Helper function to format date as YYYY-MM-DD
+    function formatDate(date) {
+        const year = date.getFullYear();
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const day = date.getDate().toString().padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+});
+</script>
+{% endblock %} 

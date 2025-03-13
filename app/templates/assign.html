@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-user-check"></i> Dozenten zuweisen</h2>
+            </div>
+            <div class="card-body">
+                {% if curricula %}
+                <form method="post" id="assignForm">
+                    {% for curriculum in curricula %}
+                    <div class="card mb-4">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0">
+                                Lehrplan vom {{ curriculum.start_date.strftime('%d.%m.%Y') }}
+                                ({{ curriculum.course_count }} Kurse)
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Thema</th>
+                                            <th>Zeitraum</th>
+                                            <th>Dozent</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for course in courses if course.curriculum_id == curriculum.curriculum_id %}
+                                        <tr>
+                                            <td>{{ course.topic }}</td>
+                                            <td>
+                                                {{ course.start_date.strftime('%d.%m.%Y') }} - 
+                                                {{ course.end_date.strftime('%d.%m.%Y') }}
+                                            </td>
+                                            <td>
+                                                <select class="form-select lecturer-select" 
+                                                        name="assignments[]"
+                                                        data-course-id="{{ course.id }}"
+                                                        data-start="{{ course.start_date.isoformat() }}"
+                                                        data-end="{{ course.end_date.isoformat() }}">
+                                                    <option value="">Bitte wählen...</option>
+                                                    <option value="{{ course.id }}:0" 
+                                                            {% if not course.lecturer_id %}selected{% endif %}>
+                                                        -- Keine Zuweisung --
+                                                    </option>
+                                                    {% for lecturer in lecturers %}
+                                                    <option value="{{ course.id }}:{{ lecturer.id }}"
+                                                            {% if course.lecturer_id == lecturer.id %}selected{% endif %}
+                                                            data-color="{{ lecturer.color }}">
+                                                        {{ lecturer.name }}
+                                                    </option>
+                                                    {% endfor %}
+                                                </select>
+                                            </td>
+                                            <td class="conflict-status">
+                                                {% if course.id in conflicts and conflicts[course.id] %}
+                                                <span class="badge bg-danger">
+                                                    Konflikt mit: 
+                                                    {% for conflict in conflicts[course.id] %}
+                                                    {{ conflict.topic }}{% if not loop.last %}, {% endif %}
+                                                    {% endfor %}
+                                                </span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Alle Zuweisungen speichern
+                        </button>
+                    </div>
+                </form>
+                {% else %}
+                <div class="alert alert-info">
+                    <h5><i class="fas fa-info-circle"></i> Keine Lehrpläne vorhanden</h5>
+                    <p>Es wurden noch keine Lehrpläne hochgeladen. 
+                        <a href="{{ url_for('main.index') }}">Laden Sie einen Lehrplan hoch</a>.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const lecturerSelects = document.querySelectorAll('.lecturer-select');
+    
+    function checkConflicts(changedSelect) {
+        const courseId = changedSelect.dataset.courseId;
+        const lecturerId = changedSelect.value.split(':')[1];
+        const startDate = new Date(changedSelect.dataset.start);
+        const endDate = new Date(changedSelect.dataset.end);
+        
+        // Reset all conflict markings
+        lecturerSelects.forEach(select => {
+            select.classList.remove('is-invalid');
+        });
+        
+        if (lecturerId === '0') return;  // No conflicts for unassigned
+        
+        // Check for conflicts with other assignments
+        lecturerSelects.forEach(select => {
+            if (select !== changedSelect && 
+                select.value && 
+                select.value.split(':')[1] === lecturerId) {
+                
+                const otherStart = new Date(select.dataset.start);
+                const otherEnd = new Date(select.dataset.end);
+                
+                if (startDate < otherEnd && endDate > otherStart) {
+                    // Conflict found!
+                    select.classList.add('is-invalid');
+                    changedSelect.classList.add('is-invalid');
+                }
+            }
+        });
+    }
+    
+    lecturerSelects.forEach(select => {
+        select.addEventListener('change', function() {
+            checkConflicts(this);
+        });
+        
+        // Style the select based on the lecturer's color
+        const option = select.querySelector('option:checked');
+        if (option && option.dataset.color) {
+            select.style.color = option.dataset.color;
+        }
+    });
+});
+</script>
+
+<style>
+.lecturer-select.is-invalid {
+    border-color: #dc3545;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23dc3545' stroke='none'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right calc(0.375em + 0.1875rem) center;
+    background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+}
+</style>
+{% endblock %} 

@@ -1,0 +1,479 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card shadow">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+        <h2 class="mb-0"><i class="fas fa-calendar-alt"></i> Timeline</h2>
+        <div class="btn-group">
+            <a href="{{ url_for('main.assign') }}" class="btn btn-primary">
+                <i class="fas fa-user-check"></i> Dozenten zuweisen
+            </a>
+            <a href="{{ url_for('main.duplicate_curriculum') }}" class="btn btn-success">
+                <i class="fas fa-copy"></i> Lehrplan duplizieren
+            </a>
+            <a href="{{ url_for('main.export_report') }}" class="btn btn-outline-primary">
+                <i class="fas fa-file-alt"></i> Kompletten Bericht exportieren
+            </a>
+        </div>
+    </div>
+    
+    <!-- Filter Controls -->
+    <div class="card-body bg-light border-bottom p-3">
+        <form id="filterForm" method="get" action="{{ url_for('main.show_timeline') }}" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label for="lecturer_id" class="form-label">Dozent</label>
+                <select class="form-select" id="lecturer_id" name="lecturer_id">
+                    <option value="">Alle Dozenten</option>
+                    {% for lecturer in lecturers %}
+                    <option value="{{ lecturer.id }}" {% if request.args.get('lecturer_id')|int == lecturer.id %}selected{% endif %}>
+                        {{ lecturer.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="curriculum_id" class="form-label">Lehrplan</label>
+                <select class="form-select" id="curriculum_id" name="curriculum_id">
+                    <option value="">Alle Lehrpläne</option>
+                    {% for curriculum in curricula %}
+                    <option value="{{ curriculum.curriculum_id }}" {% if request.args.get('curriculum_id') == curriculum.curriculum_id %}selected{% endif %}>
+                        Batch (Start: {{ curriculum.start_date.strftime('%d.%m.%Y') }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="start_date" class="form-label">Von</label>
+                <input type="date" class="form-control" id="start_date" name="start_date" 
+                       value="{{ request.args.get('start_date', '') }}">
+            </div>
+            <div class="col-md-2">
+                <label for="end_date" class="form-label">Bis</label>
+                <input type="date" class="form-control" id="end_date" name="end_date"
+                       value="{{ request.args.get('end_date', '') }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="fas fa-filter"></i> Filtern
+                </button>
+                {% if request.args %}
+                <a href="{{ url_for('main.show_timeline') }}" class="btn btn-outline-secondary w-100 mt-2">
+                    <i class="fas fa-times"></i> Filter zurücksetzen
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+    
+    <div class="card-body p-3">
+        <!-- Timeline Legend and Info -->
+        <div class="mb-3 d-flex flex-wrap justify-content-between align-items-center">
+            <div class="timeline-legend d-flex flex-wrap align-items-center">
+                <div class="legend-item me-3">
+                    <span class="legend-color" style="background-color: rgba(255,235,235,0.5);"></span>
+                    <span class="legend-text">Wochenende</span>
+                </div>
+                <div class="legend-item me-3">
+                    <span class="legend-color" style="background-color: rgba(255,165,0,0.15); border: 1px solid rgba(255,165,0,0.6);"></span>
+                    <span class="legend-text">Urlaub</span>
+                </div>
+                <div class="legend-item me-3">
+                    <span class="legend-color" style="background-color: rgba(255,0,0,0.15); border: 1px solid rgba(255,0,0,0.6);"></span>
+                    <span class="legend-text">Nicht verfügbar</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: transparent; border: 2px solid rgba(220,53,69,0.8);"></span>
+                    <span class="legend-text">Heute</span>
+                </div>
+            </div>
+            
+            <div class="export-actions">
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-primary" onclick="exportTimeline('png')">
+                        <i class="fas fa-download"></i> PNG
+                    </button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="exportTimeline('svg')">
+                        <i class="fas fa-download"></i> SVG
+                    </button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="exportTimeline('pdf')">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="timeline-container">
+            {{ timeline | safe }}
+        </div>
+        
+        <!-- Navigation and Quick Actions -->
+        <div class="timeline-actions mt-3 d-flex justify-content-between">
+            <div>
+                <button class="btn btn-sm btn-outline-secondary" id="zoomOut">
+                    <i class="fas fa-search-minus"></i> Herauszoomen
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" id="zoomIn">
+                    <i class="fas fa-search-plus"></i> Hineinzoomen
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" id="resetZoom">
+                    <i class="fas fa-sync"></i> Zurücksetzen
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" id="goToToday">
+                    <i class="fas fa-calendar-day"></i> Zu Heute
+                </button>
+            </div>
+            <div>
+                <a href="{{ url_for('main.manage_curriculum') }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-cog"></i> Lehrpläne verwalten
+                </a>
+            </div>
+        </div>
+
+        <!-- Füge einen Button für den verbesserten PDF-Export hinzu -->
+        <div class="text-end mb-3">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#pdfExportModal">
+                <i class="fas fa-file-pdf"></i> PDF-Bericht exportieren
+            </button>
+        </div>
+
+        <!-- PDF Export Modal -->
+        <div class="modal fade" id="pdfExportModal" tabindex="-1" aria-labelledby="pdfExportModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="pdfExportModalLabel">PDF-Bericht exportieren</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schließen"></button>
+                    </div>
+                    <form action="{{ url_for('main.export_report') }}" method="post" target="_blank">
+                        <div class="modal-body">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <div class="card h-100">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Berichtstyp</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input" type="radio" name="report_type" id="reportTypeStandard" value="standard" checked>
+                                                <label class="form-check-label" for="reportTypeStandard">
+                                                    Standard (komplette Übersicht)
+                                                </label>
+                                            </div>
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input" type="radio" name="report_type" id="reportTypeLecturer" value="lecturer">
+                                                <label class="form-check-label" for="reportTypeLecturer">
+                                                    Dozentenbericht (Details zu Dozenten)
+                                                </label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="report_type" id="reportTypeCurriculum" value="curriculum">
+                                                <label class="form-check-label" for="reportTypeCurriculum">
+                                                    Lehrplanbericht (Details zu Lehrplänen)
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card h-100">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Berichtsoptionen</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input" type="checkbox" name="include_statistics" id="includeStatistics" checked>
+                                                <label class="form-check-label" for="includeStatistics">
+                                                    Statistiken einbeziehen
+                                                </label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="include_availabilities" id="includeAvailabilities" checked>
+                                                <label class="form-check-label" for="includeAvailabilities">
+                                                    Verfügbarkeiten einbeziehen
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Filter</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row g-3">
+                                                <div class="col-md-6">
+                                                    <label for="lecturer_filter" class="form-label">Dozent</label>
+                                                    <select class="form-select" id="lecturer_filter" name="lecturer_id">
+                                                        <option value="">Alle Dozenten</option>
+                                                        {% for lecturer in lecturers %}
+                                                        <option value="{{ lecturer.id }}" {% if request.args.get('lecturer_id')|int == lecturer.id %}selected{% endif %}>
+                                                            {{ lecturer.name }}
+                                                        </option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label for="curriculum_filter" class="form-label">Lehrplan</label>
+                                                    <select class="form-select" id="curriculum_filter" name="curriculum_id">
+                                                        <option value="">Alle Lehrpläne</option>
+                                                        {% for curriculum in curricula %}
+                                                        <option value="{{ curriculum.curriculum_id }}" {% if request.args.get('curriculum_id') == curriculum.curriculum_id %}selected{% endif %}>
+                                                            Batch (Start: {{ curriculum.start_date.strftime('%d.%m.%Y') }})
+                                                        </option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label for="start_date" class="form-label">Startdatum</label>
+                                                    <input type="date" class="form-control" id="start_date" name="start_date" value="{{ request.args.get('start_date', '') }}">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label for="end_date" class="form-label">Enddatum</label>
+                                                    <input type="date" class="form-control" id="end_date" name="end_date" value="{{ request.args.get('end_date', '') }}">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-file-export"></i> PDF erstellen
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.timeline-container {
+    position: relative;
+    width: 100%;
+    min-height: 600px;
+    background: white;
+    border-radius: 4px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.05);
+}
+
+/* Timeline Legend */
+.timeline-legend {
+    margin-bottom: 10px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.legend-color {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    margin-right: 5px;
+    border-radius: 2px;
+}
+
+.legend-text {
+    font-size: 0.85rem;
+}
+
+/* Improve bar appearance */
+.plotly .traces .point {
+    opacity: 0.9 !important;
+}
+
+/* Better hover effects */
+.plotly .traces .point:hover {
+    opacity: 1 !important;
+    filter: brightness(1.05);
+    transition: all 0.2s ease;
+}
+
+/* Improve grid lines */
+.plotly .gridlayer path {
+    stroke-width: 0.5px !important;
+}
+
+/* Better axis labels */
+.gtitle, .ytitle {
+    font-size: 13px !important;
+    font-weight: 500 !important;
+}
+
+/* Improve group headers */
+.annotation-text {
+    font-size: 14px !important;
+    font-weight: bold !important;
+}
+
+/* Custom scrollbar */
+.timeline-container::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.timeline-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.timeline-container::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.timeline-container::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Highlight course on hover */
+.plotly .traces .point:hover {
+    cursor: pointer;
+}
+</style>
+
+<script>
+// Responsive resizing
+function resizeTimeline() {
+    const container = document.querySelector('.timeline-container');
+    if (container) {
+        container.style.height = `${window.innerHeight - 350}px`;
+    }
+}
+
+window.addEventListener('load', resizeTimeline);
+window.addEventListener('resize', resizeTimeline);
+
+// Smooth timeline updates
+let resizeTimeout;
+window.addEventListener('resize', function() {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(function() {
+        window.dispatchEvent(new Event('resize'));
+    }, 100);
+});
+
+// Export functionality
+function exportTimeline(format) {
+    var gd = document.querySelector('.js-plotly-plot');
+    if (format === 'pdf') {
+        Plotly.downloadImage(gd, {
+            format: 'svg',
+            filename: 'Lehrplan_Timeline',
+            scale: 2
+        }).then(function(filename) {
+            // Konvertiere SVG zu PDF im Browser
+            var svg = gd.querySelector('.main-svg');
+            var canvas = document.createElement('canvas');
+            canvas.width = svg.width.baseVal.value * 2;
+            canvas.height = svg.height.baseVal.value * 2;
+            
+            var ctx = canvas.getContext('2d');
+            var data = (new XMLSerializer()).serializeToString(svg);
+            var DOMURL = window.URL || window.webkitURL || window;
+            
+            var img = new Image();
+            var svgBlob = new Blob([data], {type: 'image/svg+xml;charset=utf-8'});
+            var url = DOMURL.createObjectURL(svgBlob);
+            
+            img.onload = function() {
+                ctx.drawImage(img, 0, 0);
+                DOMURL.revokeObjectURL(url);
+                
+                canvas.toBlob(function(blob) {
+                    var pdfFile = new File([blob], 'Lehrplan_Timeline.pdf', {type: 'application/pdf'});
+                    var a = document.createElement('a');
+                    a.href = URL.createObjectURL(pdfFile);
+                    a.download = 'Lehrplan_Timeline.pdf';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                });
+            };
+            img.src = url;
+        });
+    } else {
+        Plotly.downloadImage(gd, {
+            format: format,
+            filename: 'Lehrplan_Timeline',
+            scale: 2
+        });
+    }
+}
+
+// Add zoom functions
+document.addEventListener('DOMContentLoaded', function() {
+    const gd = document.querySelector('.js-plotly-plot');
+    
+    // Add event listeners for zoom buttons
+    document.getElementById('zoomIn').addEventListener('click', function() {
+        if (gd && gd._fullLayout) {
+            const currentRange = gd._fullLayout.xaxis.range;
+            const midpoint = (currentRange[0] + currentRange[1]) / 2;
+            const newRange = [
+                midpoint - (midpoint - currentRange[0]) * 0.7,
+                midpoint + (currentRange[1] - midpoint) * 0.7
+            ];
+            Plotly.relayout(gd, {'xaxis.range': newRange});
+        }
+    });
+    
+    document.getElementById('zoomOut').addEventListener('click', function() {
+        if (gd && gd._fullLayout) {
+            const currentRange = gd._fullLayout.xaxis.range;
+            const midpoint = (currentRange[0] + currentRange[1]) / 2;
+            const newRange = [
+                midpoint - (midpoint - currentRange[0]) * 1.3,
+                midpoint + (currentRange[1] - midpoint) * 1.3
+            ];
+            Plotly.relayout(gd, {'xaxis.range': newRange});
+        }
+    });
+    
+    document.getElementById('resetZoom').addEventListener('click', function() {
+        if (gd) {
+            Plotly.relayout(gd, {'xaxis.autorange': true});
+        }
+    });
+    
+    document.getElementById('goToToday').addEventListener('click', function() {
+        if (gd && gd._fullLayout) {
+            const today = new Date();
+            const currentRange = gd._fullLayout.xaxis.range;
+            const rangeWidth = new Date(currentRange[1]) - new Date(currentRange[0]);
+            
+            const newStart = new Date(today);
+            newStart.setDate(today.getDate() - rangeWidth.getDate() / 4);
+            
+            const newEnd = new Date(today);
+            newEnd.setDate(today.getDate() + rangeWidth.getDate() / 4 * 3);
+            
+            Plotly.relayout(gd, {
+                'xaxis.range': [newStart, newEnd]
+            });
+        }
+    });
+    
+    // Add click event for courses to navigate to course details
+    if (gd) {
+        gd.on('plotly_click', function(data) {
+            const pt = data.points[0];
+            if (pt && pt.customdata && pt.customdata[0]) {
+                const courseId = pt.customdata[0];
+                window.location.href = "{{ url_for('main.manage_curriculum') }}#course-" + courseId;
+            }
+        });
+    }
+});
+</script>
+{% endblock %} 

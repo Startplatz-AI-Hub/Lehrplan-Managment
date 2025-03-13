@@ -1,0 +1,552 @@
+{% extends "base.html" %}
+
+{% block head %}
+<!-- FullCalendar CSS -->
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/locales/de.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tippy.js@6.3.7/dist/tippy-bundle.umd.min.js"></script>
+
+<style>
+#calendar {
+    height: calc(100vh - 300px);
+    min-height: 600px;
+}
+
+.fc-event {
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 0.85rem;
+}
+
+.fc-event.availability-event {
+    border: none;
+}
+
+.fc-day-today {
+    background-color: rgba(220,53,69,0.05) !important;
+}
+
+.fc-toolbar-title {
+    font-size: 1.5rem !important;
+    font-weight: 500 !important;
+}
+
+.fc-button-primary {
+    background-color: #6c757d !important;
+    border-color: #6c757d !important;
+}
+
+.fc-button-primary:hover {
+    background-color: #5a6268 !important;
+    border-color: #545b62 !important;
+}
+
+.fc-button-active {
+    background-color: #495057 !important;
+    border-color: #495057 !important;
+}
+
+@media (max-width: 767.98px) {
+    .fc-toolbar {
+        flex-direction: column;
+    }
+    
+    .fc-toolbar-chunk {
+        margin-bottom: 0.5rem;
+    }
+    
+    #calendar {
+        height: calc(100vh - 350px);
+    }
+}
+
+.calendar-container {
+    margin-top: 20px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.fc-event {
+    cursor: pointer;
+    border: none !important;
+    border-left: 4px solid rgba(0,0,0,0.2) !important;
+    border-radius: 2px !important;
+    padding: 2px 5px !important;
+}
+
+.fc-day-today {
+    background-color: rgba(255, 220, 40, 0.15) !important;
+}
+
+.fc-day-sat, .fc-day-sun {
+    background-color: rgba(255, 200, 200, 0.15);
+}
+
+.calendar-card {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.filter-section {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.legend-color {
+    width: 15px;
+    height: 15px;
+    border-radius: 3px;
+    margin-right: 8px;
+}
+
+.tippy-box {
+    background-color: white;
+    color: #333;
+    border-radius: 4px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    padding: 0 !important;
+    max-width: 300px !important;
+}
+
+.calendar-tooltip {
+    padding: 0;
+}
+
+.tooltip-header {
+    padding: 10px;
+    border-bottom: 1px solid #e9ecef;
+    font-weight: bold;
+}
+
+.tooltip-body {
+    padding: 10px;
+}
+
+.tooltip-footer {
+    padding: 10px;
+    border-top: 1px solid #e9ecef;
+    background-color: #f8f9fa;
+    text-align: right;
+}
+
+.event-header {
+    border-radius: 4px 4px 0 0;
+    padding: 10px;
+    color: white;
+}
+
+.event-actions {
+    margin-top: 10px;
+}
+
+.availability-event {
+    opacity: 0.8;
+}
+
+.event-icon {
+    margin-right: 5px;
+}
+
+.calendar-actions {
+    margin-bottom: 15px;
+}
+
+.ical-dropdown .dropdown-menu {
+    padding: 15px;
+    width: 300px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-3">
+        <div class="col">
+            <h1><i class="fas fa-calendar"></i> Kalenderansicht</h1>
+            <p class="lead">Kurse und Dozentenverfügbarkeiten im Kalenderformat</p>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-9">
+            <!-- Calendar Actions -->
+            <div class="d-flex justify-content-between align-items-center calendar-actions">
+                <div class="btn-group">
+                    <button id="todayBtn" class="btn btn-outline-secondary">
+                        <i class="fas fa-calendar-day"></i> Heute
+                    </button>
+                    <button id="prevBtn" class="btn btn-outline-secondary">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <button id="nextBtn" class="btn btn-outline-secondary">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+                
+                <div class="dropdown ical-dropdown">
+                    <button class="btn btn-success dropdown-toggle" type="button" id="icalExportDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-file-export"></i> Kalender exportieren
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="icalExportDropdown">
+                        <h6 class="dropdown-header">Kalender exportieren (iCal)</h6>
+                        <form id="icalExportForm" action="{{ url_for('main.calendar_ical') }}" class="px-3 py-2">
+                            <div class="mb-3">
+                                <label for="ical_lecturer_id" class="form-label">Dozent</label>
+                                <select class="form-select form-select-sm" id="ical_lecturer_id" name="lecturer_id">
+                                    <option value="">Alle Dozenten</option>
+                                    {% for lecturer in lecturers %}
+                                    <option value="{{ lecturer.id }}">{{ lecturer.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Ereignistyp</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="event_type" id="event_type_all" value="" checked>
+                                    <label class="form-check-label" for="event_type_all">
+                                        Alle Ereignisse
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="event_type" id="event_type_course" value="course">
+                                    <label class="form-check-label" for="event_type_course">
+                                        Nur Kurse
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="event_type" id="event_type_availability" value="availability">
+                                    <label class="form-check-label" for="event_type_availability">
+                                        Nur Verfügbarkeiten
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Zeitraum (optional)</label>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <input type="date" class="form-control form-control-sm" name="start_date" id="ical_start_date" placeholder="Startdatum">
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="date" class="form-control form-control-sm" name="end_date" id="ical_end_date" placeholder="Enddatum">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-download"></i> iCal herunterladen
+                                </button>
+                            </div>
+                            
+                            <div class="mt-3 small text-muted">
+                                <i class="fas fa-info-circle"></i> Die iCal-Datei kann in Google Calendar, Apple Kalender, Microsoft Outlook usw. importiert werden.
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="btn-group">
+                    <button id="monthViewBtn" class="btn btn-outline-primary active">
+                        <i class="fas fa-calendar-alt"></i> Monat
+                    </button>
+                    <button id="weekViewBtn" class="btn btn-outline-primary">
+                        <i class="fas fa-calendar-week"></i> Woche
+                    </button>
+                </div>
+            </div>
+            
+            <div class="calendar-card">
+                <div id="calendar" class="calendar-container"></div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="filter-section mb-3">
+                <h5><i class="fas fa-filter"></i> Filter</h5>
+                <form id="filterForm">
+                    <div class="mb-3">
+                        <label for="lecturer_filter" class="form-label">Dozent</label>
+                        <select class="form-select" id="lecturer_filter">
+                            <option value="all">Alle anzeigen</option>
+                            {% for lecturer in lecturers %}
+                            <option value="{{ lecturer.id }}">{{ lecturer.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Ereignistyp</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="show_courses" checked>
+                            <label class="form-check-label" for="show_courses">
+                                Kurse anzeigen
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="show_availabilities" checked>
+                            <label class="form-check-label" for="show_availabilities">
+                                Verfügbarkeiten anzeigen
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <button type="button" id="applyFilters" class="btn btn-primary btn-sm w-100">
+                        <i class="fas fa-check"></i> Filter anwenden
+                    </button>
+                    
+                    <button type="button" id="resetFilters" class="btn btn-outline-secondary btn-sm w-100 mt-2">
+                        <i class="fas fa-undo"></i> Zurücksetzen
+                    </button>
+                </form>
+            </div>
+            
+            <div class="filter-section">
+                <h5><i class="fas fa-info-circle"></i> Legende</h5>
+                <div class="legend-items">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #3788d8;"></div>
+                        <div>Kurs</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: rgba(255,165,0,0.5);"></div>
+                        <div>Urlaub</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: rgba(255,0,0,0.5);"></div>
+                        <div>Nicht verfügbar</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: rgba(255, 220, 40, 0.15);"></div>
+                        <div>Heute</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: rgba(255, 200, 200, 0.15);"></div>
+                        <div>Wochenende</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Event Tooltip Template -->
+<div id="tooltip-template" style="display: none;">
+    <div class="calendar-tooltip">
+        <div class="event-header" data-header-color>
+            <span data-event-icon></span>
+            <span data-event-title></span>
+        </div>
+        <div class="tooltip-body">
+            <div data-event-details></div>
+            <div class="event-actions">
+                <a href="#" class="btn btn-sm btn-outline-primary" data-event-link>
+                    <i class="fas fa-external-link-alt"></i> Details
+                </a>
+                <a href="#" class="btn btn-sm btn-outline-success" data-ical-link>
+                    <i class="fas fa-calendar-plus"></i> In Kalender exportieren
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    var calendarEvents = JSON.parse('{{ events|tojson|safe }}');
+    
+    // Initialize calendar
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'de',
+        height: 'auto',
+        headerToolbar: false,
+        dayMaxEvents: true,
+        firstDay: 1, // Woche beginnt Montag
+        events: calendarEvents,
+        eventDidMount: function(info) {
+            const event = info.event;
+            const eventType = event.extendedProps.type;
+            
+            // Create tooltips with advanced info
+            tippy(info.el, {
+                content: createTooltipContent(event),
+                allowHTML: true,
+                theme: 'light',
+                placement: 'top',
+                interactive: true,
+                appendTo: document.body
+            });
+        }
+    });
+    
+    calendar.render();
+    
+    // Helper function to create tooltip content
+    function createTooltipContent(event) {
+        const template = document.getElementById('tooltip-template').cloneNode(true);
+        const tooltipContent = template.querySelector('.calendar-tooltip');
+        
+        const header = tooltipContent.querySelector('.event-header');
+        header.style.backgroundColor = event.backgroundColor;
+        
+        const title = tooltipContent.querySelector('[data-event-title]');
+        title.textContent = event.title;
+        
+        const eventIcon = tooltipContent.querySelector('[data-event-icon]');
+        const eventDetails = tooltipContent.querySelector('[data-event-details]');
+        const eventLink = tooltipContent.querySelector('[data-event-link]');
+        const icalLink = tooltipContent.querySelector('[data-ical-link]');
+        
+        if (event.extendedProps.type === 'course') {
+            eventIcon.innerHTML = '<i class="fas fa-book event-icon"></i>';
+            
+            let details = `<strong>Dozent:</strong> ${event.extendedProps.lecturer_name}<br>`;
+            details += `<strong>Zeitraum:</strong> ${formatDate(event.start)} - ${formatDate(new Date(event.end.getTime() - 86400000))}<br>`;
+            details += `<strong>Dauer:</strong> ${Math.ceil((event.end - event.start) / (1000 * 60 * 60 * 24))} Tage`;
+            
+            eventDetails.innerHTML = details;
+            eventLink.href = event.url || '#';
+            
+            const courseId = event.extendedProps.course_id;
+            icalLink.href = `/calendar/event/${courseId}/ical?type=course`;
+        } 
+        else if (event.extendedProps.type === 'availability') {
+            if (event.extendedProps.icon) {
+                eventIcon.innerHTML = `<i class="${event.extendedProps.icon} event-icon"></i>`;
+            }
+            
+            const availabilityType = event.title.includes('Urlaub') ? 'Urlaub' : 'Nicht verfügbar';
+            
+            let details = `<strong>Typ:</strong> ${availabilityType}<br>`;
+            details += `<strong>Dozent:</strong> ${event.extendedProps.lecturer_name}<br>`;
+            details += `<strong>Zeitraum:</strong> ${formatDate(event.start)} - ${formatDate(new Date(event.end.getTime() - 86400000))}`;
+            
+            if (event.extendedProps.note) {
+                details += `<br><strong>Notiz:</strong> ${event.extendedProps.note}`;
+            }
+            
+            eventDetails.innerHTML = details;
+            eventLink.style.display = 'none';
+            
+            const availabilityId = event.extendedProps.availability_id;
+            icalLink.href = `/calendar/event/${availabilityId}/ical?type=availability`;
+        }
+        
+        return tooltipContent;
+    }
+    
+    function formatDate(date) {
+        return new Date(date).toLocaleDateString('de-DE', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+    }
+    
+    // Button handlers
+    document.getElementById('todayBtn').addEventListener('click', function() {
+        calendar.today();
+    });
+    
+    document.getElementById('prevBtn').addEventListener('click', function() {
+        calendar.prev();
+    });
+    
+    document.getElementById('nextBtn').addEventListener('click', function() {
+        calendar.next();
+    });
+    
+    document.getElementById('monthViewBtn').addEventListener('click', function() {
+        calendar.changeView('dayGridMonth');
+        document.getElementById('monthViewBtn').classList.add('active');
+        document.getElementById('weekViewBtn').classList.remove('active');
+    });
+    
+    document.getElementById('weekViewBtn').addEventListener('click', function() {
+        calendar.changeView('timeGridWeek');
+        document.getElementById('weekViewBtn').classList.add('active');
+        document.getElementById('monthViewBtn').classList.remove('active');
+    });
+    
+    // Apply filters
+    document.getElementById('applyFilters').addEventListener('click', function() {
+        const lecturerId = document.getElementById('lecturer_filter').value;
+        const showCourses = document.getElementById('show_courses').checked;
+        const showAvailabilities = document.getElementById('show_availabilities').checked;
+        
+        calendar.getEvents().forEach(function(event) {
+            const eventType = event.extendedProps.type;
+            const eventLecturerId = event.extendedProps.lecturer_id;
+            
+            let visible = true;
+            
+            // Check event type
+            if ((eventType === 'course' && !showCourses) || 
+                (eventType === 'availability' && !showAvailabilities)) {
+                visible = false;
+            }
+            
+            // Check lecturer
+            if (lecturerId !== 'all' && eventLecturerId != lecturerId) {
+                visible = false;
+            }
+            
+            // Update visibility
+            event.setProp('display', visible ? 'auto' : 'none');
+        });
+    });
+    
+    // Reset filters
+    document.getElementById('resetFilters').addEventListener('click', function() {
+        document.getElementById('lecturer_filter').value = 'all';
+        document.getElementById('show_courses').checked = true;
+        document.getElementById('show_availabilities').checked = true;
+        
+        calendar.getEvents().forEach(function(event) {
+            event.setProp('display', 'auto');
+        });
+    });
+    
+    // Set initial date range for iCal export from current view
+    function updateDateRange() {
+        const view = calendar.view;
+        document.getElementById('ical_start_date').value = formatDateForInput(view.activeStart);
+        document.getElementById('ical_end_date').value = formatDateForInput(new Date(view.activeEnd.getTime() - 86400000));
+    }
+    
+    function formatDateForInput(date) {
+        const d = new Date(date);
+        let month = '' + (d.getMonth() + 1);
+        let day = '' + d.getDate();
+        const year = d.getFullYear();
+        
+        if (month.length < 2) month = '0' + month;
+        if (day.length < 2) day = '0' + day;
+        
+        return [year, month, day].join('-');
+    }
+    
+    // Update date range when calendar view changes
+    calendar.on('datesSet', function() {
+        updateDateRange();
+    });
+    
+    // Set initial date range
+    updateDateRange();
+});
+</script>
+{% endblock %} 
