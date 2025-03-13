@@ -1,86 +1,131 @@
-# Lehrplan-Management-System
+# Lehrplan-Management System
 
-Ein webbasiertes Lehrplan-Management-System entwickelt mit Flask, das es ermöglicht, Lehrpläne zu verwalten, Kurse in einer interaktiven Timeline darzustellen und Dozenten mit ihren Verfügbarkeiten zu verwalten.
+A comprehensive web application for managing educational curricula and teaching plans.
+
+## Overview
+
+The Lehrplan-Management System helps educational institutions create, manage, and distribute curriculum documents. It streamlines the process of curriculum development, revision, and implementation while ensuring compliance with educational standards.
 
 ## Features
 
-- **Lehrpläne verwalten**: Hochladen und Parsen von Lehrplänen als CSV-Dateien
-- **Interaktive Timeline**: Visualisierung von Kursen nach Batch/Lehrplan gruppiert
-- **Dozentenverwaltung**: Zuweisung von Dozenten zu Kursen mit Konfliktprüfung
-- **Exportfunktionen**: Export der Timeline als PNG, SVG oder PDF
+- **Curriculum Creation**: Design and format curriculum documents with an intuitive interface
+- **Version Control**: Track changes and maintain a history of curriculum revisions
+- **Collaborative Editing**: Allow multiple educators to work on curriculum documents simultaneously
+- **Standards Alignment**: Map curriculum content to educational standards
+- **Resource Management**: Attach and organize teaching resources related to curriculum components
+- **Export Options**: Generate PDF documents, printable worksheets, and digital formats
+- **User Management**: Role-based access control for administrators, curriculum designers, and teachers
 
-## Deployment auf Replit
+## Installation
 
-### Schritt 1: Projekt auf Replit erstellen
+### Prerequisites
 
-1. Besuche [Replit](https://replit.com) und melde dich an
-2. Klicke auf "+ Create Repl"
-3. Wähle "Import from GitHub" und gib deine GitHub-Repository-URL ein
-   - Alternativ: Wähle "Python" und importiere die Dateien manuell
-4. Benenne das Repl und klicke auf "Create Repl"
+- Python 3.8+
+- pip (Python package manager)
+- Virtual environment (recommended)
 
-### Schritt 2: Konfiguration
+### Setup Instructions
 
-1. Replit verwendet eine `replit.nix` und eine `.replit` Datei zur Konfiguration. Wenn diese nicht automatisch erstellt werden, füge folgende `.replit` Datei hinzu:
+1. Clone the repository:
+   ```
+   git clone https://github.com/yourusername/lehrplan-management.git
+   cd lehrplan-management
+   ```
+
+2. Create and activate a virtual environment:
+   ```
+   python -m venv venv
+   # Windows
+   venv\Scripts\activate
+   # macOS/Linux
+   source venv/bin/activate
+   ```
+
+3. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+
+4. Set up environment variables:
+   Create a `.env` file with the following variables:
+   ```
+   FLASK_APP=app
+   FLASK_ENV=development
+   SECRET_KEY=your_secret_key
+   DATABASE_URI=sqlite:///lehrplan.db
+   ```
+
+5. Initialize the database:
+   ```
+   flask db init
+   flask db migrate
+   flask db upgrade
+   ```
+
+6. Run the application:
+   ```
+   flask run
+   ```
+
+7. Access the application at `http://127.0.0.1:5000`
+
+## Project Structure
 
 ```
-language = "python3"
-entrypoint = "run.py"
-run = "python run.py"
+lehrplan-management/
+├── app/                    # Application package
+│   ├── __init__.py         # Initialize the app
+│   ├── models/             # Database models
+│   ├── routes/             # Route definitions
+│   ├── static/             # Static files (CSS, JS, images)
+│   ├── templates/          # HTML templates
+│   └── utils/              # Utility functions
+├── migrations/             # Database migrations
+├── tests/                  # Test suite
+├── .env                    # Environment variables
+├── .gitignore              # Git ignore file
+├── config.py               # Configuration settings
+├── requirements.txt        # Project dependencies
+└── run.py                  # Application entry point
 ```
 
-2. Erstelle eine Umgebungsvariable für das Flask-Secret:
-   - Gehe zu "Secrets" (Schloss-Symbol)
-   - Füge einen neuen Secret mit dem Namen "SECRET_KEY" hinzu und generiere einen zufälligen Wert
+## Usage
 
-### Schritt 3: Datenbank einrichten
+1. **Login**: Access the system using your credentials
+2. **Dashboard**: View an overview of your curricula and recent activities
+3. **Create Curriculum**: Start a new curriculum document from scratch or use templates
+4. **Edit Curriculum**: Modify existing curriculum documents
+5. **Share & Export**: Distribute curriculum documents to stakeholders
 
-Bei der ersten Ausführung wird die Datenbank automatisch initialisiert. Alternativ kannst du die Datenbank manuell initialisieren:
+## Development
 
-1. Öffne die Replit Shell
-2. Führe den Befehl aus: `python -c "from app import create_app, db; app = create_app(); app.app_context().push(); db.create_all()"`
+### Running Tests
 
-### Schritt 4: Anwendung starten
-
-1. Klicke auf "Run" um die Anwendung zu starten
-2. Die Anwendung ist nun unter der von Replit bereitgestellten URL verfügbar
-
-## PDF-Generierung auf Replit
-
-Bitte beachte, dass die PDF-Generierung mit pdfkit/wkhtmltopdf auf Replit eingeschränkt sein kann. Falls der PDF-Export nicht funktioniert, kannst du folgende Alternativen verwenden:
-
-1. Browser-basierter Export (mit JavaScript)
-2. Verwendung der Plotly-Export-Funktionen für SVG/PNG statt PDF
-
-## Wichtige Hinweise für Replit
-
-1. **Persistenz**: Replit speichert Daten, aber bei längerer Inaktivität kann der Container neu gestartet werden. Für kritische Daten sollte ein externes Backup verwendet werden.
-
-2. **Umgebungsvariablen**: Sensitive Daten sollten als Replit Secrets gespeichert werden.
-
-3. **URL-Zugriff**: Die öffentliche URL deiner Anwendung findest du oben im Replit-Interface nach dem Start.
-
-4. **Always On**: Für ständige Verfügbarkeit ohne "Sleep Mode" kann ein Replit "Hacker Plan" erforderlich sein.
-
-## Lokale Entwicklung
-
-```bash
-# Repository klonen
-git clone <repository-url>
-cd Lehrplan-Managment
-
-# Virtuelle Umgebung erstellen und aktivieren
-python -m venv venv
-source venv/bin/activate  # Unix/Mac
-venv\Scripts\activate     # Windows
-
-# Abhängigkeiten installieren
-pip install -r requirements.txt
-
-# Anwendung starten
-python run.py
+```
+pytest
 ```
 
-## Lizenz
+### Code Formatting
 
-Siehe `LICENSE` Datei für Details. 
+```
+black app tests
+```
+
+### Linting
+
+```
+flake8 app tests
+```
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Contributors
+
+- [Your Name](https://github.com/yourusername)
+
+## Acknowledgments
+
+- Thanks to all educators who provided feedback during the development process
+- Special thanks to [Educational Standards Organization] for standards reference data 
