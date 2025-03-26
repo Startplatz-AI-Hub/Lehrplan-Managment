@@ -771,16 +771,16 @@ def export_report():
             current_app.logger.error(error_msg)
             flash(error_msg, 'error')
             return redirect(url_for('main.show_timeline'))
-        
+            
         try:    
-            config = pdfkit.configuration(wkhtmltopdf=wkhtmltopdf_path)
+        config = pdfkit.configuration(wkhtmltopdf=wkhtmltopdf_path)
             current_app.logger.info("PDF configuration created successfully")
         except Exception as config_error:
             error_msg = f"Fehler bei der Konfiguration von pdfkit: {str(config_error)}"
             current_app.logger.error(error_msg)
             flash(error_msg, 'error')
             return redirect(url_for('main.show_timeline'))
-            
+        
         # Hole aktive Kurse basierend auf den Filteroptionen
         query = db.session.query(Course).filter(Course.active == True)
         
@@ -880,11 +880,11 @@ def export_report():
 
         # Erstelle Timeline-Bild
         try:
-            fig = create_timeline_figure(courses, filter_options)
+        fig = create_timeline_figure(courses, filter_options)
             # Reduce image quality to avoid rendering issues with wkhtmltopdf
             timeline_img = fig.to_image(format="png", width=1000, height=500, scale=1.5)
-            import base64
-            timeline_image = base64.b64encode(timeline_img).decode('utf-8')
+        import base64
+        timeline_image = base64.b64encode(timeline_img).decode('utf-8')
             current_app.logger.info("Timeline image created successfully")
         except Exception as img_error:
             error_msg = f"Fehler beim Erstellen des Timeline-Bildes: {str(img_error)}"
@@ -926,36 +926,36 @@ def export_report():
 
         # Wähle das richtige Template basierend auf dem Berichtstyp
         try:
-            if report_type == 'lecturer':
-                report_template_path = 'pdf_templates/lecturer_report.html'
-            elif report_type == 'curriculum':
-                report_template_path = 'pdf_templates/curriculum_report.html'
-            else:
-                report_template_path = 'pdf_templates/standard_report.html'
+        if report_type == 'lecturer':
+            report_template_path = 'pdf_templates/lecturer_report.html'
+        elif report_type == 'curriculum':
+            report_template_path = 'pdf_templates/curriculum_report.html'
+        else:
+            report_template_path = 'pdf_templates/standard_report.html'
 
-            # Stelle sicher, dass die Verzeichnisse existieren
-            pdf_template_dir = os.path.join(current_app.root_path, 'templates', 'pdf_templates')
-            os.makedirs(pdf_template_dir, exist_ok=True)
+        # Stelle sicher, dass die Verzeichnisse existieren
+        pdf_template_dir = os.path.join(current_app.root_path, 'templates', 'pdf_templates')
+        os.makedirs(pdf_template_dir, exist_ok=True)
             current_app.logger.info(f"Template directory created at: {pdf_template_dir}")
 
-            # Wähle das Standard-Template, wenn die spezielle Vorlage nicht existiert
-            report_template_path = os.path.join(current_app.root_path, 'templates', report_template_path)
+        # Wähle das Standard-Template, wenn die spezielle Vorlage nicht existiert
+        report_template_path = os.path.join(current_app.root_path, 'templates', report_template_path)
             current_app.logger.info(f"Attempting to load template from: {report_template_path}")
             
-            if not os.path.exists(report_template_path):
-                report_template_path = os.path.join(current_app.root_path, 'templates', 'pdf_templates/standard_report.html')
+        if not os.path.exists(report_template_path):
+            report_template_path = os.path.join(current_app.root_path, 'templates', 'pdf_templates/standard_report.html')
                 current_app.logger.info(f"Falling back to standard template: {report_template_path}")
                 
-                if not os.path.exists(report_template_path):
-                    # Erstelle das Standard-Template, wenn es nicht existiert
+            if not os.path.exists(report_template_path):
+                # Erstelle das Standard-Template, wenn es nicht existiert
                     current_app.logger.info("Standard template not found, creating it")
                     os.makedirs(os.path.dirname(report_template_path), exist_ok=True)
-                    with open(report_template_path, 'w', encoding='utf-8') as f:
-                        f.write(get_standard_report_template())
-            
+                with open(report_template_path, 'w', encoding='utf-8') as f:
+                    f.write(get_standard_report_template())
+
             # Lese Template-Inhalt
-            with open(report_template_path, 'r', encoding='utf-8') as f:
-                report_template = f.read()
+        with open(report_template_path, 'r', encoding='utf-8') as f:
+            report_template = f.read()
                 current_app.logger.info(f"Template loaded, size: {len(report_template)} bytes")
         except Exception as template_error:
             error_msg = f"Fehler beim Laden des Templates: {str(template_error)}"
@@ -965,7 +965,7 @@ def export_report():
 
         # Rendere Template
         try:
-            template = Template(report_template)
+        template = Template(report_template)
             current_app.logger.info("Template object created")
             
             render_context = {
@@ -1026,7 +1026,7 @@ def export_report():
             except Exception as file_error:
                 current_app.logger.warning(f"File-based PDF generation failed: {str(file_error)}. Trying string method...")
                 # Fall back to string-based conversion
-                pdf = pdfkit.from_string(html_content, False, options=pdf_options, configuration=config)
+        pdf = pdfkit.from_string(html_content, False, options=pdf_options, configuration=config)
                 current_app.logger.info("PDF generated successfully from string")
             
             # Clean up temporary file
@@ -1043,31 +1043,31 @@ def export_report():
 
         # Send PDF
         try:
-            pdf_io = BytesIO(pdf)
-            pdf_io.seek(0)
-            
+        pdf_io = BytesIO(pdf)
+        pdf_io.seek(0)
+        
             # Generate filename based on filter options
-            filename_parts = ['Lehrplan_Bericht']
-            if filter_options.get('lecturer_id'):
-                lecturer = Lecturer.query.get(filter_options['lecturer_id'])
-                if lecturer:
-                    filename_parts.append(f"Dozent_{lecturer.name.replace(' ', '_')}")
+        filename_parts = ['Lehrplan_Bericht']
+        if filter_options.get('lecturer_id'):
+            lecturer = Lecturer.query.get(filter_options['lecturer_id'])
+            if lecturer:
+                filename_parts.append(f"Dozent_{lecturer.name.replace(' ', '_')}")
+        
+        if filter_options.get('curriculum_id'):
+            filename_parts.append(f"Batch_{filter_options['curriculum_id'][:8]}")
             
-            if filter_options.get('curriculum_id'):
-                filename_parts.append(f"Batch_{filter_options['curriculum_id'][:8]}")
-                
-            if filter_options.get('date_range'):
-                start, end = filter_options['date_range']
-                filename_parts.append(f"{start.strftime('%Y%m%d')}-{end.strftime('%Y%m%d')}")
-                
-            filename = '_'.join(filename_parts) + '.pdf'
+        if filter_options.get('date_range'):
+            start, end = filter_options['date_range']
+            filename_parts.append(f"{start.strftime('%Y%m%d')}-{end.strftime('%Y%m%d')}")
+            
+        filename = '_'.join(filename_parts) + '.pdf'
             current_app.logger.info(f"Sending PDF with filename: {filename}")
-            
-            return send_file(
-                pdf_io,
-                download_name=filename,
-                mimetype='application/pdf'
-            )
+        
+        return send_file(
+            pdf_io,
+            download_name=filename,
+            mimetype='application/pdf'
+        )
         except Exception as send_error:
             error_msg = f"Fehler beim Senden des PDFs: {str(send_error)}"
             current_app.logger.error(error_msg)
